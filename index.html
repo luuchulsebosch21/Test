@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Dealflow</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface2: #242836;
+            --border: #2e3348;
+            --text: #e4e6f0;
+            --text-dim: #8a8fa8;
+            --accent: #6c7cff;
+            --accent-hover: #8590ff;
+            --green: #34d399;
+            --red: #f87171;
+            --orange: #fbbf24;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 24px 16px;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        h1 {
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+        }
+
+        h1 span { color: var(--accent); }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--surface);
+            border-radius: 10px;
+            padding: 4px;
+            border: 1px solid var(--border);
+        }
+
+        .tab {
+            padding: 8px 18px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.15s;
+        }
+
+        .tab:hover { color: var(--text); }
+        .tab.active { background: var(--accent); color: #fff; }
+
+        /* Period selector */
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .period-selector {
+            display: flex;
+            gap: 4px;
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 3px;
+            border: 1px solid var(--border);
+        }
+
+        .period-btn {
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.15s;
+        }
+
+        .period-btn:hover { color: var(--text); }
+        .period-btn.active { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+        .refresh-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--accent);
+            background: transparent;
+            color: var(--accent);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.15s;
+        }
+
+        .refresh-btn:hover { background: var(--accent); color: #fff; }
+        .refresh-btn.loading .refresh-icon { animation: spin 0.8s linear infinite; }
+
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        .date-display {
+            color: var(--text-dim);
+            font-size: 13px;
+            margin-left: auto;
+        }
+
+        /* News feed */
+        .feed { display: flex; flex-direction: column; gap: 12px; }
+
+        .news-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px 20px;
+            transition: border-color 0.15s;
+        }
+
+        .news-card:hover { border-color: var(--accent); }
+
+        .news-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .company-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+        }
+
+        .company-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .news-type {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .type-funding { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+        .type-product { background: rgba(108, 124, 255, 0.15); color: var(--accent); }
+        .type-partnership { background: rgba(251, 191, 36, 0.15); color: var(--orange); }
+        .type-hiring { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+        .type-exit { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+        .type-general { background: rgba(138, 143, 168, 0.15); color: var(--text-dim); }
+
+        .news-date {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-left: auto;
+        }
+
+        .news-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .news-summary {
+            font-size: 13px;
+            color: var(--text-dim);
+            line-height: 1.5;
+        }
+
+        .news-source {
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .news-source:hover { text-decoration: underline; }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-dim);
+        }
+
+        .empty-state svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 16px;
+            opacity: 0.4;
+        }
+
+        .empty-state p { font-size: 14px; margin-top: 8px; }
+
+        /* Portfolio management */
+        .portfolio-section { display: none; }
+        .portfolio-section.active { display: block; }
+        .feed-section { display: none; }
+        .feed-section.active { display: block; }
+
+        .add-form {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .add-form input {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .add-form input:focus { border-color: var(--accent); }
+
+        .add-form input::placeholder { color: var(--text-dim); }
+
+        .add-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: background 0.15s;
+        }
+
+        .add-btn:hover { background: var(--accent-hover); }
+
+        .company-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .company-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 18px;
+        }
+
+        .company-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .company-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .company-name { font-weight: 500; font-size: 15px; }
+
+        .company-sector {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 2px;
+        }
+
+        .remove-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--red);
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.15s;
+        }
+
+        .remove-btn:hover { background: rgba(248, 113, 113, 0.1); border-color: var(--red); }
+
+        .sector-input {
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            width: 160px;
+        }
+
+        .sector-input:focus { border-color: var(--accent); }
+
+        .company-count {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+        }
+
+        /* Loading */
+        .loading-skeleton {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .skeleton-line {
+            height: 12px;
+            background: var(--surface2);
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .skeleton-line:last-child { margin-bottom: 0; width: 60%; }
+        .skeleton-line.short { width: 40%; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .controls { flex-direction: column; align-items: stretch; }
+            .date-display { margin-left: 0; }
+            header { flex-direction: column; align-items: flex-start; }
+            .add-form { flex-direction: column; }
+            .sector-input { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><span>&#9679;</span> Portfolio Dealflow</h1>
+            <div class="tabs">
+                <button class="tab active" data-tab="feed">Nieuwsfeed</button>
+                <button class="tab" data-tab="portfolio">Portfolio</button>
+            </div>
+        </header>
+
+        <!-- Feed Section -->
+        <div class="feed-section active" id="feed-section">
+            <div class="controls">
+                <div class="period-selector">
+                    <button class="period-btn active" data-period="day">Dag</button>
+                    <button class="period-btn" data-period="week">Week</button>
+                    <button class="period-btn" data-period="month">Maand</button>
+                </div>
+                <button class="refresh-btn" id="refresh-btn">
+                    <svg class="refresh-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </svg>
+                    Vernieuwen
+                </button>
+                <span class="date-display" id="date-display"></span>
+            </div>
+            <div class="feed" id="news-feed"></div>
+        </div>
+
+        <!-- Portfolio Section -->
+        <div class="portfolio-section" id="portfolio-section">
+            <div class="add-form">
+                <input type="text" id="company-input" placeholder="Bedrijfsnaam toevoegen...">
+                <input type="text" class="sector-input" id="sector-input" placeholder="Sector (optioneel)">
+                <button class="add-btn" id="add-btn">Toevoegen</button>
+            </div>
+            <div class="company-count" id="company-count"></div>
+            <div class="company-list" id="company-list"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- State ---
+        const STORAGE_KEY = 'portfolio-dealflow';
+        const COLORS = ['#6c7cff','#34d399','#f87171','#fbbf24','#a855f7','#ec4899','#06b6d4','#f97316','#84cc16','#64748b'];
+
+        let state = loadState();
+
+        function defaultState() {
+            return {
+                companies: [
+                    { name: 'Stripe', sector: 'Fintech', color: COLORS[0] },
+                    { name: 'SpaceX', sector: 'Aerospace', color: COLORS[1] },
+                    { name: 'Databricks', sector: 'AI/Data', color: COLORS[2] },
+                    { name: 'Klarna', sector: 'Fintech', color: COLORS[3] },
+                    { name: 'Canva', sector: 'Design', color: COLORS[4] },
+                ],
+                newsCache: {},
+                period: 'day'
+            };
+        }
+
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.companies && parsed.companies.length >= 0) return parsed;
+                }
+            } catch(e) {}
+            return defaultState();
+        }
+
+        function saveState() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+
+        // --- News Generation ---
+        // Simulated realistic news engine. In production, replace with API calls to
+        // a news aggregator (e.g. NewsAPI, Google News, or custom LLM pipeline).
+
+        const NEWS_TEMPLATES = {
+            funding: [
+                '{company} sluit Series {round} financieringsronde af van ${amount}M',
+                '{company} haalt ${amount}M op in nieuwe investeringsronde',
+                'Nieuwe financiering voor {company}: ${amount}M tegen hogere waardering',
+            ],
+            product: [
+                '{company} lanceert nieuw platform voor enterprise klanten',
+                '{company} kondigt grote product-update aan',
+                '{company} breidt productaanbod uit naar nieuwe markt',
+                '{company} introduceert AI-gedreven features in kernproduct',
+            ],
+            partnership: [
+                '{company} tekent strategisch partnership met Fortune 500-bedrijf',
+                '{company} gaat samenwerking aan met grote speler in {sector}',
+                'Nieuwe integratie: {company} partnert met marktleider',
+            ],
+            hiring: [
+                '{company} breidt team uit met 200+ nieuwe medewerkers',
+                '{company} opent nieuw kantoor in Europa',
+                'Nieuwe CEO aangesteld bij {company}',
+                '{company} werft ex-Google VP aan als CTO',
+            ],
+            exit: [
+                'Geruchten over mogelijke IPO van {company}',
+                '{company} verkent strategische opties waaronder verkoop',
+                'Marktanalisten verwachten {company} IPO in komende kwartalen',
+            ],
+            general: [
+                '{company} rapporteert sterke kwartaalcijfers',
+                'Analisten verhogen waardering {company}',
+                '{company} wint industrie-award voor innovatie',
+                '{company} ziet sterke groei in {sector} segment',
+            ]
+        };
+
+        const SUMMARIES = {
+            funding: [
+                'De ronde werd geleid door bekende investeerders uit Silicon Valley. Het bedrijf plant het kapitaal in te zetten voor internationale expansie en productontwikkeling.',
+                'Met deze investering stijgt de totale funding naar meer dan $1B. Het bedrijf groeit sterk in zowel omzet als klantenbestand.',
+            ],
+            product: [
+                'De nieuwe features zijn gericht op enterprise-klanten en moeten de positie in de markt verder versterken. Beta-testers rapporteren positieve resultaten.',
+                'Het product richt zich op een groeiend marktsegment en speelt in op de toenemende vraag vanuit grote ondernemingen.',
+            ],
+            partnership: [
+                'Het partnership biedt toegang tot een nieuw klantsegment en versterkt de go-to-market strategie van beide partijen.',
+                'De samenwerking combineert complementaire technologieen en opent nieuwe distributiemogelijkheden.',
+            ],
+            hiring: [
+                'De uitbreiding weerspiegelt de sterke groeifase van het bedrijf. Het nieuwe talent wordt ingezet op R&D en verkoop.',
+                'Met de nieuwe aanstellingen richt het bedrijf zich op versnelde groei in de komende twee jaar.',
+            ],
+            exit: [
+                'Bronnen dicht bij het bedrijf bevestigen dat er gesprekken lopen met investeringsbanken. Een definitief besluit is nog niet genomen.',
+                'De marktomstandigheden worden als gunstig beschouwd voor een publieke notering in de huidige marktcyclus.',
+            ],
+            general: [
+                'Het bedrijf blijft sterke prestaties neerzetten ondanks de uitdagende marktomstandigheden.',
+                'Analisten zijn optimistisch over de vooruitzichten op basis van recente datapunten en markttrends.',
+            ]
+        };
+
+        function seededRandom(seed) {
+            let s = seed;
+            return function() {
+                s = (s * 16807 + 0) % 2147483647;
+                return (s - 1) / 2147483646;
+            };
+        }
+
+        function dateToSeed(dateStr) {
+            let hash = 0;
+            for (let i = 0; i < dateStr.length; i++) {
+                hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
+                hash |= 0;
+            }
+            return Math.abs(hash);
+        }
+
+        function generateNewsForDate(dateStr) {
+            const companies = state.companies;
+            if (companies.length === 0) return [];
+
+            const rng = seededRandom(dateToSeed(dateStr));
+            const types = Object.keys(NEWS_TEMPLATES);
+
+            // 0-10 items per day, weighted toward fewer items
+            const weights = [0.15, 0.20, 0.20, 0.18, 0.12, 0.07, 0.04, 0.02, 0.01, 0.005, 0.005];
+            let r = rng();
+            let cumulative = 0;
+            let count = 0;
+            for (let i = 0; i < weights.length; i++) {
+                cumulative += weights[i];
+                if (r < cumulative) { count = i; break; }
+            }
+            count = Math.min(count, companies.length * 2);
+
+            const items = [];
+            for (let i = 0; i < count; i++) {
+                const company = companies[Math.floor(rng() * companies.length)];
+                const type = types[Math.floor(rng() * types.length)];
+                const templates = NEWS_TEMPLATES[type];
+                const template = templates[Math.floor(rng() * templates.length)];
+                const summaryOptions = SUMMARIES[type];
+                const summary = summaryOptions[Math.floor(rng() * summaryOptions.length)];
+
+                const rounds = ['B', 'C', 'D', 'E'];
+                const amounts = [50, 75, 100, 150, 200, 300, 500];
+
+                let title = template
+                    .replace('{company}', company.name)
+                    .replace('{sector}', company.sector || 'tech')
+                    .replace('{round}', rounds[Math.floor(rng() * rounds.length)])
+                    .replace('{amount}', amounts[Math.floor(rng() * amounts.length)]);
+
+                items.push({
+                    company: company.name,
+                    color: company.color,
+                    type,
+                    title,
+                    summary,
+                    date: dateStr,
+                    source: 'dealflow-monitor'
+                });
+            }
+
+            return items;
+        }
+
+        function getDatesForPeriod(period) {
+            const dates = [];
+            const today = new Date();
+            let days = 1;
+            if (period === 'week') days = 7;
+            if (period === 'month') days = 30;
+
+            for (let i = 0; i < days; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() - i);
+                dates.push(d.toISOString().split('T')[0]);
+            }
+            return dates;
+        }
+
+        function getAllNews(period) {
+            const dates = getDatesForPeriod(period);
+            let allNews = [];
+            for (const date of dates) {
+                allNews = allNews.concat(generateNewsForDate(date));
+            }
+            return allNews;
+        }
+
+        // --- Type labels ---
+        const TYPE_LABELS = {
+            funding: 'Funding',
+            product: 'Product',
+            partnership: 'Partnership',
+            hiring: 'Team',
+            exit: 'Exit',
+            general: 'Algemeen'
+        };
+
+        // --- Rendering ---
+        function renderDateDisplay() {
+            const el = document.getElementById('date-display');
+            const today = new Date();
+            const period = state.period;
+            const options = { day: 'numeric', month: 'long', year: 'numeric' };
+
+            if (period === 'day') {
+                el.textContent = today.toLocaleDateString('nl-NL', options);
+            } else if (period === 'week') {
+                const weekAgo = new Date(today);
+                weekAgo.setDate(today.getDate() - 6);
+                el.textContent = weekAgo.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) +
+                    ' - ' + today.toLocaleDateString('nl-NL', options);
+            } else {
+                const monthAgo = new Date(today);
+                monthAgo.setDate(today.getDate() - 29);
+                el.textContent = monthAgo.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) +
+                    ' - ' + today.toLocaleDateString('nl-NL', options);
+            }
+        }
+
+        function renderFeed() {
+            const feed = document.getElementById('news-feed');
+            const news = getAllNews(state.period);
+
+            if (news.length === 0) {
+                feed.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        </svg>
+                        <p><strong>Geen nieuws gevonden</strong></p>
+                        <p>${state.companies.length === 0 ? 'Voeg eerst bedrijven toe aan je portfolio.' : 'Geen relevant dealflow nieuws voor deze periode.'}</p>
+                    </div>`;
+                return;
+            }
+
+            feed.innerHTML = news.map(item => `
+                <div class="news-card">
+                    <div class="news-card-header">
+                        <span class="company-badge">
+                            <span class="company-dot" style="background:${item.color}"></span>
+                            ${item.company}
+                        </span>
+                        <span class="news-type type-${item.type}">${TYPE_LABELS[item.type]}</span>
+                        <span class="news-date">${formatDate(item.date)}</span>
+                    </div>
+                    <div class="news-title">${item.title}</div>
+                    <div class="news-summary">${item.summary}</div>
+                </div>
+            `).join('');
+        }
+
+        function formatDate(dateStr) {
+            const d = new Date(dateStr + 'T12:00:00');
+            return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+        }
+
+        function renderCompanyList() {
+            const list = document.getElementById('company-list');
+            const count = document.getElementById('company-count');
+            count.textContent = `${state.companies.length} bedrijven in portfolio`;
+
+            if (state.companies.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <p>Geen bedrijven in je portfolio. Voeg er een toe hierboven.</p>
+                    </div>`;
+                return;
+            }
+
+            list.innerHTML = state.companies.map((c, i) => `
+                <div class="company-item">
+                    <div class="company-info">
+                        <span class="company-color" style="background:${c.color}"></span>
+                        <div>
+                            <div class="company-name">${c.name}</div>
+                            ${c.sector ? `<div class="company-sector">${c.sector}</div>` : ''}
+                        </div>
+                    </div>
+                    <button class="remove-btn" data-index="${i}">Verwijderen</button>
+                </div>
+            `).join('');
+        }
+
+        // --- Event handlers ---
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                const target = tab.dataset.tab;
+                document.getElementById('feed-section').classList.toggle('active', target === 'feed');
+                document.getElementById('portfolio-section').classList.toggle('active', target === 'portfolio');
+            });
+        });
+
+        document.querySelectorAll('.period-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.period = btn.dataset.period;
+                saveState();
+                renderDateDisplay();
+                renderFeed();
+            });
+        });
+
+        document.getElementById('refresh-btn').addEventListener('click', function() {
+            this.classList.add('loading');
+            const feed = document.getElementById('news-feed');
+            feed.innerHTML = Array(3).fill(`
+                <div class="loading-skeleton">
+                    <div class="skeleton-line short"></div>
+                    <div class="skeleton-line"></div>
+                    <div class="skeleton-line"></div>
+                </div>
+            `).join('');
+
+            setTimeout(() => {
+                this.classList.remove('loading');
+                renderFeed();
+            }, 800);
+        });
+
+        document.getElementById('add-btn').addEventListener('click', addCompany);
+        document.getElementById('company-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') addCompany();
+        });
+
+        function addCompany() {
+            const nameInput = document.getElementById('company-input');
+            const sectorInput = document.getElementById('sector-input');
+            const name = nameInput.value.trim();
+            if (!name) return;
+
+            const exists = state.companies.some(c => c.name.toLowerCase() === name.toLowerCase());
+            if (exists) { nameInput.value = ''; return; }
+
+            state.companies.push({
+                name,
+                sector: sectorInput.value.trim() || '',
+                color: COLORS[state.companies.length % COLORS.length]
+            });
+            saveState();
+            nameInput.value = '';
+            sectorInput.value = '';
+            renderCompanyList();
+        }
+
+        document.getElementById('company-list').addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-btn')) {
+                const index = parseInt(e.target.dataset.index);
+                state.companies.splice(index, 1);
+                saveState();
+                renderCompanyList();
+            }
+        });
+
+        // --- Init ---
+        renderDateDisplay();
+        renderFeed();
+        renderCompanyList();
+    </script>
+</body>
+</html>
