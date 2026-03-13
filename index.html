@@ -694,7 +694,12 @@
                     <button class="period-btn active" data-period="day">Dag</button>
                     <button class="period-btn" data-period="week">Week</button>
                     <button class="period-btn" data-period="month">Maand</button>
+                    <button class="period-btn" data-period="quarter">Kwartaal</button>
                     <button class="period-btn" data-period="custom">Aangepast</button>
+                </div>
+                <div class="quarter-selector" id="quarter-selector" style="display:none">
+                    <select class="form-input" id="quarter-select" style="padding:6px 10px;font-size:13px;border-radius:6px;">
+                    </select>
                 </div>
                 <div class="date-range" id="date-range" style="display:none">
                     <label>Van</label>
@@ -909,6 +914,7 @@
                     { name: 'Databricks', website: 'https://databricks.com', sector: 'AI/Data', color: COLORS[2] },
                 ],
                 period: 'day',
+                quarter: '',
                 dateFrom: '',
                 dateTo: ''
             };
@@ -945,12 +951,45 @@
         }
 
         // --- Google News RSS ---
+        function getQuarterDates(quarterStr) {
+            // Format: "2026-Q1" -> { from: Jan 1, to: Mar 31 }
+            const [year, q] = quarterStr.split('-Q');
+            const qNum = parseInt(q);
+            const y = parseInt(year);
+            const startMonth = (qNum - 1) * 3;
+            const from = new Date(y, startMonth, 1);
+            const to = new Date(y, startMonth + 3, 0, 23, 59, 59); // last day of quarter
+            return { from, to };
+        }
+
+        function populateQuarterSelect() {
+            const select = document.getElementById('quarter-select');
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentQ = Math.ceil((now.getMonth() + 1) / 3);
+            const options = [];
+
+            // Show quarters from current back to 2 years ago
+            for (let y = currentYear; y >= currentYear - 2; y--) {
+                const maxQ = (y === currentYear) ? currentQ : 4;
+                for (let q = maxQ; q >= 1; q--) {
+                    const val = `${y}-Q${q}`;
+                    const label = `Q${q} ${y}`;
+                    options.push(`<option value="${val}" ${val === state.quarter ? 'selected' : ''}>${label}</option>`);
+                }
+            }
+
+            select.innerHTML = options.join('');
+        }
+
         function getDateRangeParams() {
             const period = state.period;
             const now = new Date();
             let from, to;
 
-            if (period === 'custom') {
+            if (period === 'quarter' && state.quarter) {
+                return getQuarterDates(state.quarter);
+            } else if (period === 'custom') {
                 from = state.dateFrom ? new Date(state.dateFrom + 'T00:00:00') : new Date(now - 86400000);
                 to = state.dateTo ? new Date(state.dateTo + 'T23:59:59') : now;
             } else if (period === 'day') {
@@ -969,6 +1008,12 @@
 
         function getGoogleNewsDateParam() {
             const period = state.period;
+            if (period === 'quarter' && state.quarter) {
+                const { from, to } = getQuarterDates(state.quarter);
+                const fStr = from.toISOString().split('T')[0];
+                const tStr = to.toISOString().split('T')[0];
+                return `after:${fStr} before:${tStr}`;
+            }
             if (period === 'custom') {
                 const from = state.dateFrom || '';
                 const to = state.dateTo || '';
@@ -1135,10 +1180,8 @@
                 return b.date - a.date;
             });
 
-            // Strict limit: 0-10 per day as promised
-            const days = state.period === 'day' ? 1 : state.period === 'week' ? 7 : 30;
-            const maxItems = Math.min(days * 10, 100);
-            newsItems = all.slice(0, maxItems);
+            // Show all relevant articles (no artificial cap)
+            newsItems = all;
 
             // Show status
             statusBar.textContent = `${newsItems.length} artikel${newsItems.length !== 1 ? 'en' : ''} gevonden`;
@@ -1165,15 +1208,14 @@
 
         function renderDateDisplay() {
             const el = document.getElementById('date-display');
-            const options = { day: 'numeric', month: 'long', year: 'numeric' };
-            const shortOpts = { day: 'numeric', month: 'short' };
+            const fullOpts = { day: 'numeric', month: 'long', year: 'numeric' };
             const { from, to } = getDateRangeParams();
 
             if (state.period === 'day') {
-                el.textContent = new Date().toLocaleDateString('nl-NL', options);
+                el.textContent = new Date().toLocaleDateString('nl-NL', fullOpts);
             } else {
-                el.textContent = from.toLocaleDateString('nl-NL', shortOpts) +
-                    ' - ' + to.toLocaleDateString('nl-NL', options);
+                el.textContent = from.toLocaleDateString('nl-NL', fullOpts) +
+                    ' - ' + to.toLocaleDateString('nl-NL', fullOpts);
             }
         }
 
@@ -1298,9 +1340,11 @@
                 state.period = btn.dataset.period;
 
                 const dateRange = document.getElementById('date-range');
+                const quarterSelector = document.getElementById('quarter-selector');
+
                 if (state.period === 'custom') {
                     dateRange.style.display = 'flex';
-                    // Set defaults if empty
+                    quarterSelector.style.display = 'none';
                     if (!state.dateFrom) {
                         const d = new Date();
                         d.setDate(d.getDate() - 7);
@@ -1311,14 +1355,31 @@
                         state.dateTo = new Date().toISOString().split('T')[0];
                         document.getElementById('date-to').value = state.dateTo;
                     }
+                } else if (state.period === 'quarter') {
+                    dateRange.style.display = 'none';
+                    quarterSelector.style.display = 'flex';
+                    populateQuarterSelect();
+                    if (!state.quarter) {
+                        const now = new Date();
+                        state.quarter = `${now.getFullYear()}-Q${Math.ceil((now.getMonth() + 1) / 3)}`;
+                    }
+                    document.getElementById('quarter-select').value = state.quarter;
                 } else {
                     dateRange.style.display = 'none';
+                    quarterSelector.style.display = 'none';
                 }
 
                 saveState();
                 renderDateDisplay();
                 refreshNews();
             });
+        });
+
+        document.getElementById('quarter-select').addEventListener('change', (e) => {
+            state.quarter = e.target.value;
+            saveState();
+            renderDateDisplay();
+            refreshNews();
         });
 
         document.getElementById('date-from').addEventListener('change', (e) => {
@@ -1648,90 +1709,100 @@
         }
 
         // --- Smart extraction from unstructured text (PDF) ---
+        // Focus: identify fund investments, portfolio companies, assets
         function extractCompaniesFromText(text) {
             const companies = [];
             const seen = new Set();
 
-            // Extract URLs from text
+            // Extract all URLs for later matching
             const urlMap = {};
             const urlRegex = /(https?:\/\/[^\s,;)]+|www\.[^\s,;)]+)/gi;
             let urlMatch;
             while ((urlMatch = urlRegex.exec(text)) !== null) {
                 const url = urlMatch[1];
-                // Try to associate URL with nearby company name
-                const context = text.substring(Math.max(0, urlMatch.index - 100), urlMatch.index + url.length + 100);
+                const context = text.substring(Math.max(0, urlMatch.index - 150), urlMatch.index + url.length + 150);
                 urlMap[url] = context;
             }
 
-            // Look for patterns that suggest company names
-            // Pattern 1: Lines that look like company entries (capitalized, short)
-            const lines = text.split(/[\n\r]+/);
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed.length < 2 || trimmed.length > 80) continue;
+            // Keywords that signal a section listing portfolio companies / investments
+            const investmentContextWords = /\b(portfolio|investering|investment|belang|participatie|holding|deelneming|asset|positie|position|allocation|allocatie|company|bedrijf|onderneming|fund|fonds)\b/i;
 
-                // Skip lines that are clearly not company names
-                if (/^\d+[\s.)]/.test(trimmed)) continue; // numbered lines - extract the name part
-                if (/^(pagina|page|totaal|total|datum|date|type|sector|naam|name|bedrijf|company)\b/i.test(trimmed)) continue;
+            // Words that are definitely NOT company names (fund document noise)
+            const blacklist = /^(de|het|een|the|van|voor|met|door|over|naar|bij|uit|als|maar|dan|ook|nog|wel|niet|geen|dit|dat|die|der|des|ten|deze|alle|andere|meer|onze|ons|hun|zijn|haar|werd|wordt|worden|heeft|hebben|kan|kon|zal|zou|moet|mogen|laten|gaan|komen|maken|nemen|geven|pagina|page|totaal|total|datum|date|type|sector|naam|name|bedrijf|company|kwartaal|quarter|halfjaar|jaarverslag|annual|report|rendement|return|performance|toelichting|notes|risico|risk|disclaimer|samenvatting|summary|inhoudsopgave|contents|bijlage|appendix|index|cash|liquide|middelen|obligatie|bond|staatsobligatie|rente|interest|valuta|currency|koers|aandelen|markt|market|benchmark|volatiliteit|duration|maturity|looptijd|coupon|yield|spread|credit|rating|outlook|strategie|strategy|beleid|policy|beheerder|manager|bewaarder|custodian|accountant|auditor|bestuur|board|toezicht|supervision|kosten|costs|fee|vergoeding|waarde|value|netto|bruto|gross|net|per|ultimo|primo|einde|begin|start|end|januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)$/i;
 
-                // Match company-like patterns: starts with capital, reasonable length
-                const nameMatch = trimmed.match(/^(?:\d+[\s.)]+)?([A-Z][A-Za-z0-9\s&.'+-]{1,60})(?:\s*[-|]\s*(.+))?$/);
-                if (nameMatch) {
-                    const name = nameMatch[1].trim();
-                    if (name.length < 2 || name.split(/\s+/).length > 6) continue;
+            // Score text segments that likely contain company listings
+            const textLower = text.toLowerCase();
+            const hasInvestmentContext = investmentContextWords.test(textLower);
 
-                    // Filter out common non-company lines
-                    if (/^(de|het|een|the|van|voor|met|door|over|naar|bij|uit|als|maar|dan|ook|nog|wel|niet|geen|dit|dat|die|der|des|ten)\b/i.test(name)) continue;
+            // Strategy 1: Find text near investment-related headers/sections
+            // Look for company names that appear near investment keywords
+            const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);
 
-                    const key = name.toLowerCase();
-                    if (seen.has(key)) continue;
-                    seen.add(key);
-
-                    // Try to find associated URL
-                    let website = '';
-                    for (const [url, context] of Object.entries(urlMap)) {
-                        if (context.toLowerCase().includes(name.toLowerCase())) {
-                            website = url;
-                            break;
-                        }
+            // Build context: track which lines are near investment-related sections
+            const contextWindow = 15; // lines of context
+            const investmentLines = new Set();
+            lines.forEach((line, i) => {
+                if (/\b(portfolio|invester|belang|participati|holding|deelnem|asset|positie|allocation|allocati|top.?\d+|overview|overzicht)\b/i.test(line)) {
+                    for (let j = Math.max(0, i - 2); j < Math.min(lines.length, i + contextWindow); j++) {
+                        investmentLines.add(j);
                     }
-
-                    if (website && !website.startsWith('http')) {
-                        website = 'https://' + website;
-                    }
-
-                    companies.push({
-                        name,
-                        website,
-                        sector: nameMatch[2] ? nameMatch[2].trim() : ''
-                    });
                 }
+            });
+
+            // Strategy 2: Look for structured entries (name + percentage/amount patterns)
+            const companyWithDataRegex = /^([A-Z][A-Za-z0-9\s&.'\-\/,]+?)\s+[\d,.]+\s*%/;
+            const companyWithAmountRegex = /^([A-Z][A-Za-z0-9\s&.'\-\/,]+?)\s+[\d,.]+(?:\s*(?:EUR|USD|GBP|mln|mrd|k|M|B))?$/;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.length < 2 || line.length > 100) continue;
+
+                let candidateName = null;
+
+                // Pattern A: Company name followed by percentage (typical fund report)
+                let m = line.match(companyWithDataRegex);
+                if (m) candidateName = m[1].trim();
+
+                // Pattern B: Company name followed by amount
+                if (!candidateName) {
+                    m = line.match(companyWithAmountRegex);
+                    if (m) candidateName = m[1].trim();
+                }
+
+                // Pattern C: Standalone company name in investment context section
+                if (!candidateName && (investmentLines.has(i) || !hasInvestmentContext)) {
+                    // Only match clean capitalized names (likely company)
+                    m = line.match(/^([A-Z][A-Za-z0-9]+(?:[\s&.\-][A-Za-z0-9]+){0,4})$/);
+                    if (m && investmentLines.has(i)) candidateName = m[1].trim();
+                }
+
+                if (!candidateName) continue;
+                if (candidateName.length < 2 || candidateName.length > 60) continue;
+                if (candidateName.split(/\s+/).length > 5) continue;
+                if (blacklist.test(candidateName)) continue;
+                // Skip if it's a number, date, or percentage
+                if (/^\d/.test(candidateName) || /^\d{1,2}[\/-]/.test(candidateName)) continue;
+
+                const key = candidateName.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+
+                // Try to find associated URL
+                let website = '';
+                for (const [url, context] of Object.entries(urlMap)) {
+                    if (context.toLowerCase().includes(candidateName.toLowerCase())) {
+                        website = url;
+                        break;
+                    }
+                }
+                if (website && !website.startsWith('http')) {
+                    website = 'https://' + website;
+                }
+
+                companies.push({ name: candidateName, website, sector: '' });
             }
 
-            // If no structured company names found, try extracting from tabular text
-            if (companies.length === 0) {
-                // Look for any capitalized multi-word phrases that could be company names
-                const capRegex = /\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3})\b/g;
-                let capMatch;
-                const candidates = {};
-                while ((capMatch = capRegex.exec(text)) !== null) {
-                    const name = capMatch[1].trim();
-                    if (name.length < 3 || name.length > 50) continue;
-                    // Skip common words
-                    if (/^(The|Van|Voor|Het|Een|Dit|Dat|Met|Door|Over|Bij|Total|Page|Date|Pagina|Datum)\b/.test(name)) continue;
-                    candidates[name] = (candidates[name] || 0) + 1;
-                }
-
-                // Take names that appear at least twice (likely real company names)
-                for (const [name, count] of Object.entries(candidates)) {
-                    if (count >= 2 && !seen.has(name.toLowerCase())) {
-                        seen.add(name.toLowerCase());
-                        companies.push({ name, website: '', sector: '' });
-                    }
-                }
-            }
-
-            return companies.slice(0, 50); // Safety limit
+            return companies.slice(0, 50);
         }
 
         // --- Import modal ---
@@ -1808,13 +1879,24 @@
         });
 
         // --- Init ---
-        // Restore custom date range if set
+        // Restore period state
         if (state.period === 'custom') {
             document.getElementById('date-range').style.display = 'flex';
             document.getElementById('date-from').value = state.dateFrom || '';
             document.getElementById('date-to').value = state.dateTo || '';
             document.querySelectorAll('.period-btn').forEach(b => {
                 b.classList.toggle('active', b.dataset.period === 'custom');
+            });
+        } else if (state.period === 'quarter') {
+            document.getElementById('quarter-selector').style.display = 'flex';
+            populateQuarterSelect();
+            if (!state.quarter) {
+                const now = new Date();
+                state.quarter = `${now.getFullYear()}-Q${Math.ceil((now.getMonth() + 1) / 3)}`;
+            }
+            document.getElementById('quarter-select').value = state.quarter;
+            document.querySelectorAll('.period-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.period === 'quarter');
             });
         }
 
