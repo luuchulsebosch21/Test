@@ -43,15 +43,9 @@
             gap: 12px;
         }
 
-        h1 {
-            font-size: 22px;
-            font-weight: 600;
-            letter-spacing: -0.3px;
-        }
-
+        h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
         h1 span { color: var(--accent); }
 
-        /* Tabs */
         .tabs {
             display: flex;
             gap: 4px;
@@ -76,7 +70,7 @@
         .tab:hover { color: var(--text); }
         .tab.active { background: var(--accent); color: #fff; }
 
-        /* Period selector */
+        /* Controls */
         .controls {
             display: flex;
             align-items: center;
@@ -108,6 +102,31 @@
 
         .period-btn:hover { color: var(--text); }
         .period-btn.active { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+        .date-range {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .date-range label {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .date-input {
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .date-input:focus { border-color: var(--accent); }
+        .date-input::-webkit-calendar-picker-indicator { filter: invert(0.7); }
 
         .refresh-btn {
             display: flex;
@@ -144,9 +163,12 @@
             border-radius: 12px;
             padding: 18px 20px;
             transition: border-color 0.15s;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+            color: inherit;
         }
 
-        .news-card { cursor: pointer; text-decoration: none; display: block; color: inherit; }
         .news-card:hover { border-color: var(--accent); }
 
         .news-card-header {
@@ -154,6 +176,7 @@
             align-items: center;
             gap: 10px;
             margin-bottom: 10px;
+            flex-wrap: wrap;
         }
 
         .company-badge {
@@ -181,14 +204,9 @@
             letter-spacing: 0.5px;
             padding: 2px 8px;
             border-radius: 4px;
+            background: rgba(138, 143, 168, 0.15);
+            color: var(--text-dim);
         }
-
-        .type-funding { background: rgba(52, 211, 153, 0.15); color: var(--green); }
-        .type-product { background: rgba(108, 124, 255, 0.15); color: var(--accent); }
-        .type-partnership { background: rgba(251, 191, 36, 0.15); color: var(--orange); }
-        .type-hiring { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
-        .type-exit { background: rgba(248, 113, 113, 0.15); color: var(--red); }
-        .type-general { background: rgba(138, 143, 168, 0.15); color: var(--text-dim); }
 
         .news-date {
             font-size: 12px;
@@ -203,12 +221,6 @@
             line-height: 1.4;
         }
 
-        .news-summary {
-            font-size: 13px;
-            color: var(--text-dim);
-            line-height: 1.5;
-        }
-
         .news-source {
             display: inline-block;
             margin-top: 10px;
@@ -219,7 +231,7 @@
 
         .news-source:hover { text-decoration: underline; }
 
-        /* Empty state */
+        /* Empty & error states */
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -235,6 +247,28 @@
 
         .empty-state p { font-size: 14px; margin-top: 8px; }
 
+        .error-banner {
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: var(--red);
+            display: none;
+        }
+
+        .error-banner.visible { display: block; }
+
+        .status-bar {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .status-bar.visible { display: block; }
+
         /* Portfolio management */
         .portfolio-section { display: none; }
         .portfolio-section.active { display: block; }
@@ -242,13 +276,13 @@
         .feed-section.active { display: block; }
 
         .add-form {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto;
             gap: 8px;
             margin-bottom: 24px;
         }
 
-        .add-form input {
-            flex: 1;
+        .form-input {
             padding: 10px 14px;
             border-radius: 8px;
             border: 1px solid var(--border);
@@ -259,9 +293,8 @@
             transition: border-color 0.15s;
         }
 
-        .add-form input:focus { border-color: var(--accent); }
-
-        .add-form input::placeholder { color: var(--text-dim); }
+        .form-input:focus { border-color: var(--accent); }
+        .form-input::placeholder { color: var(--text-dim); }
 
         .add-btn {
             padding: 10px 20px;
@@ -298,21 +331,33 @@
             display: flex;
             align-items: center;
             gap: 12px;
+            min-width: 0;
         }
 
         .company-color {
             width: 12px;
             height: 12px;
             border-radius: 50%;
+            flex-shrink: 0;
         }
 
         .company-name { font-weight: 500; font-size: 15px; }
 
-        .company-sector {
+        .company-meta {
             font-size: 12px;
             color: var(--text-dim);
             margin-top: 2px;
         }
+
+        .company-website {
+            font-size: 12px;
+            color: var(--accent);
+            text-decoration: none;
+            margin-top: 1px;
+            display: inline-block;
+        }
+
+        .company-website:hover { text-decoration: underline; }
 
         .remove-btn {
             padding: 6px 12px;
@@ -323,22 +368,10 @@
             cursor: pointer;
             font-size: 12px;
             transition: all 0.15s;
+            flex-shrink: 0;
         }
 
         .remove-btn:hover { background: rgba(248, 113, 113, 0.1); border-color: var(--red); }
-
-        .sector-input {
-            padding: 10px 14px;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            background: var(--surface);
-            color: var(--text);
-            font-size: 14px;
-            outline: none;
-            width: 160px;
-        }
-
-        .sector-input:focus { border-color: var(--accent); }
 
         .company-count {
             font-size: 13px;
@@ -375,8 +408,8 @@
             .controls { flex-direction: column; align-items: stretch; }
             .date-display { margin-left: 0; }
             header { flex-direction: column; align-items: flex-start; }
-            .add-form { flex-direction: column; }
-            .sector-input { width: 100%; }
+            .add-form { grid-template-columns: 1fr; }
+            .date-range { flex-wrap: wrap; }
         }
     </style>
 </head>
@@ -397,6 +430,13 @@
                     <button class="period-btn active" data-period="day">Dag</button>
                     <button class="period-btn" data-period="week">Week</button>
                     <button class="period-btn" data-period="month">Maand</button>
+                    <button class="period-btn" data-period="custom">Aangepast</button>
+                </div>
+                <div class="date-range" id="date-range" style="display:none">
+                    <label>Van</label>
+                    <input type="date" class="date-input" id="date-from">
+                    <label>Tot</label>
+                    <input type="date" class="date-input" id="date-to">
                 </div>
                 <button class="refresh-btn" id="refresh-btn">
                     <svg class="refresh-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -407,14 +447,17 @@
                 </button>
                 <span class="date-display" id="date-display"></span>
             </div>
+            <div class="error-banner" id="error-banner"></div>
+            <div class="status-bar" id="status-bar"></div>
             <div class="feed" id="news-feed"></div>
         </div>
 
         <!-- Portfolio Section -->
         <div class="portfolio-section" id="portfolio-section">
             <div class="add-form">
-                <input type="text" id="company-input" placeholder="Bedrijfsnaam toevoegen...">
-                <input type="text" class="sector-input" id="sector-input" placeholder="Sector (optioneel)">
+                <input type="text" class="form-input" id="company-input" placeholder="Bedrijfsnaam *">
+                <input type="url" class="form-input" id="website-input" placeholder="Website (bijv. stripe.com)">
+                <input type="text" class="form-input" id="sector-input" placeholder="Sector (optioneel)">
                 <button class="add-btn" id="add-btn">Toevoegen</button>
             </div>
             <div class="company-count" id="company-count"></div>
@@ -423,25 +466,39 @@
     </div>
 
     <script>
-        // --- State ---
+        // --- Config ---
         const STORAGE_KEY = 'portfolio-dealflow';
         const COLORS = ['#6c7cff','#34d399','#f87171','#fbbf24','#a855f7','#ec4899','#06b6d4','#f97316','#84cc16','#64748b'];
-        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
+        // Investor-relevant keywords to add to search queries
+        const INVESTOR_KEYWORDS = [
+            'funding', 'investment', 'valuation', 'IPO', 'acquisition',
+            'revenue', 'partnership', 'series', 'raise', 'merger',
+            'growth', 'expansion', 'financiering', 'overname', 'waardering'
+        ];
+
+        // Multiple CORS proxies for fallback
+        const CORS_PROXIES = [
+            url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+            url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+        ];
 
         let state = loadState();
         let newsItems = [];
         let isLoading = false;
 
+        // --- State management ---
         function defaultState() {
             return {
                 companies: [
-                    { name: 'Stripe', sector: 'Fintech', color: COLORS[0] },
-                    { name: 'SpaceX', sector: 'Aerospace', color: COLORS[1] },
-                    { name: 'Databricks', sector: 'AI/Data', color: COLORS[2] },
-                    { name: 'Klarna', sector: 'Fintech', color: COLORS[3] },
-                    { name: 'Canva', sector: 'Design', color: COLORS[4] },
+                    { name: 'Stripe', website: 'https://stripe.com', sector: 'Fintech', color: COLORS[0] },
+                    { name: 'SpaceX', website: 'https://spacex.com', sector: 'Aerospace', color: COLORS[1] },
+                    { name: 'Databricks', website: 'https://databricks.com', sector: 'AI/Data', color: COLORS[2] },
                 ],
-                period: 'day'
+                period: 'day',
+                dateFrom: '',
+                dateTo: ''
             };
         }
 
@@ -460,24 +517,92 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         }
 
+        // --- CORS proxy with fallback ---
+        async function fetchWithProxy(url) {
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                try {
+                    const proxyUrl = CORS_PROXIES[i](url);
+                    const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    return await resp.text();
+                } catch(e) {
+                    console.warn(`Proxy ${i + 1} mislukt:`, e.message);
+                    if (i === CORS_PROXIES.length - 1) throw e;
+                }
+            }
+        }
+
         // --- Google News RSS ---
-        function getPeriodParam(period) {
+        function getDateRangeParams() {
+            const period = state.period;
+            const now = new Date();
+            let from, to;
+
+            if (period === 'custom') {
+                from = state.dateFrom ? new Date(state.dateFrom + 'T00:00:00') : new Date(now - 86400000);
+                to = state.dateTo ? new Date(state.dateTo + 'T23:59:59') : now;
+            } else if (period === 'day') {
+                from = new Date(now - 86400000);
+                to = now;
+            } else if (period === 'week') {
+                from = new Date(now - 7 * 86400000);
+                to = now;
+            } else {
+                from = new Date(now - 30 * 86400000);
+                to = now;
+            }
+
+            return { from, to };
+        }
+
+        function getGoogleNewsDateParam() {
+            const period = state.period;
+            if (period === 'custom') {
+                const from = state.dateFrom || '';
+                const to = state.dateTo || '';
+                if (from && to) {
+                    return `after:${from} before:${to}`;
+                } else if (from) {
+                    return `after:${from}`;
+                } else if (to) {
+                    return `before:${to}`;
+                }
+                return 'when:7d';
+            }
             if (period === 'day') return 'when:1d';
             if (period === 'week') return 'when:7d';
             return 'when:30d';
         }
 
         async function fetchNewsForCompany(company) {
-            const query = encodeURIComponent(company.name);
-            const when = getPeriodParam(state.period);
-            const rssUrl = `https://news.google.com/rss/search?q=${query}+${when}&hl=nl&gl=NL&ceid=NL:nl`;
-            const url = CORS_PROXY + encodeURIComponent(rssUrl);
+            // Build investor-focused search query
+            const investorTerms = INVESTOR_KEYWORDS.slice(0, 6).join(' OR ');
+            const dateParam = getGoogleNewsDateParam();
+            const query = `"${company.name}" (${investorTerms}) ${dateParam}`;
+            const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=nl&gl=NL&ceid=NL:nl`;
 
             try {
-                const resp = await fetch(url);
-                if (!resp.ok) throw new Error('Fetch failed');
-                const text = await resp.text();
-                return parseRSS(text, company);
+                const text = await fetchWithProxy(rssUrl);
+                const items = parseRSS(text, company);
+
+                // Also fetch broader results as fallback if few investor-specific hits
+                if (items.length < 3) {
+                    const broadQuery = `"${company.name}" ${dateParam}`;
+                    const broadUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(broadQuery)}&hl=nl&gl=NL&ceid=NL:nl`;
+                    try {
+                        const broadText = await fetchWithProxy(broadUrl);
+                        const broadItems = parseRSS(broadText, company);
+                        // Merge, avoiding duplicates
+                        const existingTitles = new Set(items.map(i => i.title));
+                        for (const item of broadItems) {
+                            if (!existingTitles.has(item.title)) {
+                                items.push(item);
+                            }
+                        }
+                    } catch(e) { /* ignore broad search failure */ }
+                }
+
+                return items;
             } catch (e) {
                 console.warn(`Nieuws ophalen mislukt voor ${company.name}:`, e);
                 return [];
@@ -487,14 +612,34 @@
         function parseRSS(xmlText, company) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(xmlText, 'text/xml');
+
+            // Check for parse errors
+            if (doc.querySelector('parsererror')) {
+                console.warn('RSS parse error voor', company.name);
+                return [];
+            }
+
             const items = doc.querySelectorAll('item');
             const results = [];
 
             items.forEach(item => {
                 const title = item.querySelector('title')?.textContent || '';
-                const link = item.querySelector('link')?.textContent || '';
                 const pubDate = item.querySelector('pubDate')?.textContent || '';
                 const source = item.querySelector('source')?.textContent || '';
+
+                // Google News RSS: <link> text is between <link> and next tag
+                // querySelector('link') returns empty in some parsers, use regex fallback
+                let link = '';
+                const linkEl = item.querySelector('link');
+                if (linkEl && linkEl.textContent) {
+                    link = linkEl.textContent.trim();
+                }
+                if (!link) {
+                    const itemXml = new XMLSerializer().serializeToString(item);
+                    const linkMatch = itemXml.match(/<link[^>]*>(.*?)<\/link>/s) ||
+                                     itemXml.match(/<link[^>]*\/>\s*(https?:\/\/[^\s<]+)/);
+                    if (linkMatch) link = linkMatch[1].trim();
+                }
 
                 // Clean title: Google News appends " - Source" at the end
                 const cleanTitle = title.replace(/\s*-\s*[^-]+$/, '');
@@ -502,6 +647,7 @@
                 results.push({
                     company: company.name,
                     color: company.color,
+                    website: company.website || '',
                     title: cleanTitle,
                     link,
                     source,
@@ -513,14 +659,9 @@
             return results;
         }
 
-        function filterByPeriod(items, period) {
-            const now = new Date();
-            let cutoff = new Date(now);
-            if (period === 'day') cutoff.setDate(now.getDate() - 1);
-            else if (period === 'week') cutoff.setDate(now.getDate() - 7);
-            else cutoff.setDate(now.getDate() - 30);
-
-            return items.filter(item => item.date >= cutoff);
+        function filterByDateRange(items) {
+            const { from, to } = getDateRangeParams();
+            return items.filter(item => item.date >= from && item.date <= to);
         }
 
         async function fetchAllNews() {
@@ -529,62 +670,80 @@
                 return;
             }
 
-            const promises = state.companies.map(c => fetchNewsForCompany(c));
+            const errorBanner = document.getElementById('error-banner');
+            const statusBar = document.getElementById('status-bar');
+            let failedCompanies = [];
+
+            statusBar.textContent = `Nieuws ophalen voor ${state.companies.length} bedrijven...`;
+            statusBar.classList.add('visible');
+
+            const promises = state.companies.map(async c => {
+                try {
+                    return await fetchNewsForCompany(c);
+                } catch(e) {
+                    failedCompanies.push(c.name);
+                    return [];
+                }
+            });
+
             const results = await Promise.all(promises);
             let all = results.flat();
 
-            // Filter by period
-            all = filterByPeriod(all, state.period);
+            // Filter by date range
+            all = filterByDateRange(all);
 
             // Sort by date (newest first)
             all.sort((a, b) => b.date - a.date);
 
-            // Limit to max 10 per day equivalent
+            // Limit results
             const maxItems = state.period === 'day' ? 10 : state.period === 'week' ? 40 : 100;
             newsItems = all.slice(0, maxItems);
+
+            // Show status
+            statusBar.textContent = `${newsItems.length} artikel${newsItems.length !== 1 ? 'en' : ''} gevonden`;
+            statusBar.classList.add('visible');
+
+            if (failedCompanies.length > 0) {
+                errorBanner.textContent = `Kon geen nieuws ophalen voor: ${failedCompanies.join(', ')}. Controleer je internetverbinding of probeer het later opnieuw.`;
+                errorBanner.classList.add('visible');
+            } else {
+                errorBanner.classList.remove('visible');
+            }
         }
 
         // --- Rendering ---
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         function formatDateFromDate(d) {
             return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
         }
 
         function renderDateDisplay() {
             const el = document.getElementById('date-display');
-            const today = new Date();
-            const period = state.period;
             const options = { day: 'numeric', month: 'long', year: 'numeric' };
+            const shortOpts = { day: 'numeric', month: 'short' };
+            const { from, to } = getDateRangeParams();
 
-            if (period === 'day') {
-                el.textContent = today.toLocaleDateString('nl-NL', options);
-            } else if (period === 'week') {
-                const weekAgo = new Date(today);
-                weekAgo.setDate(today.getDate() - 6);
-                el.textContent = weekAgo.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) +
-                    ' - ' + today.toLocaleDateString('nl-NL', options);
+            if (state.period === 'day') {
+                el.textContent = new Date().toLocaleDateString('nl-NL', options);
             } else {
-                const monthAgo = new Date(today);
-                monthAgo.setDate(today.getDate() - 29);
-                el.textContent = monthAgo.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) +
-                    ' - ' + today.toLocaleDateString('nl-NL', options);
+                el.textContent = from.toLocaleDateString('nl-NL', shortOpts) +
+                    ' - ' + to.toLocaleDateString('nl-NL', options);
             }
         }
 
         function showLoading() {
-            const feed = document.getElementById('news-feed');
-            feed.innerHTML = Array(3).fill(`
+            document.getElementById('news-feed').innerHTML = Array(3).fill(`
                 <div class="loading-skeleton">
                     <div class="skeleton-line short"></div>
                     <div class="skeleton-line"></div>
                     <div class="skeleton-line"></div>
                 </div>
             `).join('');
-        }
-
-        function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
         }
 
         function renderFeed() {
@@ -597,25 +756,32 @@
                             <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                         </svg>
                         <p><strong>Geen nieuws gevonden</strong></p>
-                        <p>${state.companies.length === 0 ? 'Voeg eerst bedrijven toe aan je portfolio.' : 'Geen relevant dealflow nieuws voor deze periode. Klik op Vernieuwen om opnieuw te zoeken.'}</p>
+                        <p>${state.companies.length === 0
+                            ? 'Voeg eerst bedrijven toe aan je portfolio.'
+                            : 'Geen relevant investeerder-nieuws voor deze periode. Probeer een andere tijdspanne of klik op Vernieuwen.'}</p>
                     </div>`;
                 return;
             }
 
-            feed.innerHTML = newsItems.map(item => `
+            feed.innerHTML = newsItems.map(item => {
+                const companyObj = state.companies.find(c => c.name === item.company);
+                const websiteHost = companyObj?.website ? new URL(companyObj.website.startsWith('http') ? companyObj.website : 'https://' + companyObj.website).hostname.replace('www.','') : '';
+
+                return `
                 <a class="news-card" href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer">
                     <div class="news-card-header">
                         <span class="company-badge">
                             <span class="company-dot" style="background:${escapeHtml(item.color)}"></span>
                             ${escapeHtml(item.company)}
                         </span>
-                        ${item.source ? `<span class="news-type type-general">${escapeHtml(item.source)}</span>` : ''}
+                        ${websiteHost ? `<span class="news-type">${escapeHtml(websiteHost)}</span>` : ''}
+                        ${item.source ? `<span class="news-type">${escapeHtml(item.source)}</span>` : ''}
                         <span class="news-date">${escapeHtml(item.dateStr)}</span>
                     </div>
                     <div class="news-title">${escapeHtml(item.title)}</div>
                     <span class="news-source">Lees artikel &#8594;</span>
-                </a>
-            `).join('');
+                </a>`;
+            }).join('');
         }
 
         function renderCompanyList() {
@@ -624,33 +790,36 @@
             count.textContent = `${state.companies.length} bedrijven in portfolio`;
 
             if (state.companies.length === 0) {
-                list.innerHTML = `
-                    <div class="empty-state">
-                        <p>Geen bedrijven in je portfolio. Voeg er een toe hierboven.</p>
-                    </div>`;
+                list.innerHTML = `<div class="empty-state"><p>Geen bedrijven in je portfolio. Voeg er een toe hierboven.</p></div>`;
                 return;
             }
 
-            list.innerHTML = state.companies.map((c, i) => `
+            list.innerHTML = state.companies.map((c, i) => {
+                const displayUrl = c.website ? c.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') : '';
+                const fullUrl = c.website ? (c.website.startsWith('http') ? c.website : 'https://' + c.website) : '';
+
+                return `
                 <div class="company-item">
                     <div class="company-info">
                         <span class="company-color" style="background:${c.color}"></span>
                         <div>
                             <div class="company-name">${escapeHtml(c.name)}</div>
-                            ${c.sector ? `<div class="company-sector">${escapeHtml(c.sector)}</div>` : ''}
+                            ${c.sector ? `<div class="company-meta">${escapeHtml(c.sector)}</div>` : ''}
+                            ${displayUrl ? `<a class="company-website" href="${escapeHtml(fullUrl)}" target="_blank" rel="noopener">${escapeHtml(displayUrl)}</a>` : ''}
                         </div>
                     </div>
                     <button class="remove-btn" data-index="${i}">Verwijderen</button>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
 
-        // --- Refresh handler ---
+        // --- Refresh ---
         async function refreshNews() {
             if (isLoading) return;
             isLoading = true;
             const btn = document.getElementById('refresh-btn');
             btn.classList.add('loading');
+            document.getElementById('error-banner').classList.remove('visible');
             showLoading();
 
             await fetchAllNews();
@@ -676,10 +845,41 @@
                 document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 state.period = btn.dataset.period;
+
+                const dateRange = document.getElementById('date-range');
+                if (state.period === 'custom') {
+                    dateRange.style.display = 'flex';
+                    // Set defaults if empty
+                    if (!state.dateFrom) {
+                        const d = new Date();
+                        d.setDate(d.getDate() - 7);
+                        state.dateFrom = d.toISOString().split('T')[0];
+                        document.getElementById('date-from').value = state.dateFrom;
+                    }
+                    if (!state.dateTo) {
+                        state.dateTo = new Date().toISOString().split('T')[0];
+                        document.getElementById('date-to').value = state.dateTo;
+                    }
+                } else {
+                    dateRange.style.display = 'none';
+                }
+
                 saveState();
                 renderDateDisplay();
                 refreshNews();
             });
+        });
+
+        document.getElementById('date-from').addEventListener('change', (e) => {
+            state.dateFrom = e.target.value;
+            saveState();
+            renderDateDisplay();
+        });
+
+        document.getElementById('date-to').addEventListener('change', (e) => {
+            state.dateTo = e.target.value;
+            saveState();
+            renderDateDisplay();
         });
 
         document.getElementById('refresh-btn').addEventListener('click', refreshNews);
@@ -691,6 +891,7 @@
 
         function addCompany() {
             const nameInput = document.getElementById('company-input');
+            const websiteInput = document.getElementById('website-input');
             const sectorInput = document.getElementById('sector-input');
             const name = nameInput.value.trim();
             if (!name) return;
@@ -698,13 +899,20 @@
             const exists = state.companies.some(c => c.name.toLowerCase() === name.toLowerCase());
             if (exists) { nameInput.value = ''; return; }
 
+            let website = websiteInput.value.trim();
+            if (website && !website.startsWith('http')) {
+                website = 'https://' + website;
+            }
+
             state.companies.push({
                 name,
+                website,
                 sector: sectorInput.value.trim() || '',
                 color: COLORS[state.companies.length % COLORS.length]
             });
             saveState();
             nameInput.value = '';
+            websiteInput.value = '';
             sectorInput.value = '';
             renderCompanyList();
         }
@@ -719,6 +927,16 @@
         });
 
         // --- Init ---
+        // Restore custom date range if set
+        if (state.period === 'custom') {
+            document.getElementById('date-range').style.display = 'flex';
+            document.getElementById('date-from').value = state.dateFrom || '';
+            document.getElementById('date-to').value = state.dateTo || '';
+            document.querySelectorAll('.period-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.period === 'custom');
+            });
+        }
+
         renderDateDisplay();
         renderCompanyList();
         refreshNews();
