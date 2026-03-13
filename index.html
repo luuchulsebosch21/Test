@@ -470,12 +470,95 @@
         const STORAGE_KEY = 'portfolio-dealflow';
         const COLORS = ['#6c7cff','#34d399','#f87171','#fbbf24','#a855f7','#ec4899','#06b6d4','#f97316','#84cc16','#64748b'];
 
-        // Investor-relevant keywords to add to search queries
+        // Investor-relevant keywords for search queries
         const INVESTOR_KEYWORDS = [
             'funding', 'investment', 'valuation', 'IPO', 'acquisition',
             'revenue', 'partnership', 'series', 'raise', 'merger',
             'growth', 'expansion', 'financiering', 'overname', 'waardering'
         ];
+
+        // --- Relevance scoring for investment case (5-year horizon) ---
+        // HIGH impact: events that materially affect company valuation or trajectory
+        const HIGH_RELEVANCE = [
+            // Funding & valuation
+            /\b(series [a-f]|funding|fundrais|raised?|financiering|kapitaal)\b/i,
+            /\b(valuation|waardering|waarde)\b/i,
+            /\b(IPO|beursgang|public offering|beurs)\b/i,
+            /\b(SPAC|direct listing)\b/i,
+            // M&A
+            /\b(acqui|overname|overgenomen|merger|fusie|bought|koopt|koop)\b/i,
+            /\b(take.?over|bod gedaan|bid)\b/i,
+            // Revenue & financials
+            /\b(revenue|omzet|omzetgroei|winst|profit|loss|verlies|EBITDA|ARR|MRR)\b/i,
+            /\b(kwartaalcijfers|quarterly|earnings|results|jaarverslag|annual report)\b/i,
+            /\b(breakeven|break.even|winstgevend|profitable|profitability)\b/i,
+            // Strategic
+            /\b(pivot|strateg|restructur|herstructurer|reorganis)\b/i,
+            /\b(bankrupt|failliet|insolvency|default|liquidat)\b/i,
+            // Clinical / regulatory (biotech/pharma)
+            /\b(FDA|EMA|approv|goedgekeurd|clinical trial|fase [1-3]|phase [1-3])\b/i,
+            /\b(trial results?|testresultat|endpoint|efficacy)\b/i,
+            /\b(patent|octrooi|IP|intellectual property)\b/i,
+            // Leadership
+            /\b(CEO|CFO|CTO|COO|founder|oprichter|board|bestuur)\b/i,
+            /\b(apoint|benoem|stepped down|afgetreden|resign|vertrek)\b/i,
+            // Market position
+            /\b(market share|marktaandeel|monopol|dominant|marktleider)\b/i,
+            /\b(unicorn|decacorn)\b/i,
+        ];
+
+        // MEDIUM impact: notable but not directly value-changing
+        const MEDIUM_RELEVANCE = [
+            /\b(partnership|samenwerking|partner|alliantie|alliance)\b/i,
+            /\b(contract|deal|overeenkomst|agreement)\b/i,
+            /\b(launch|lanceer|lanceert|release|uitgebracht)\b/i,
+            /\b(expansion|expansie|uitbreid|groei|growth|scaling)\b/i,
+            /\b(hire|hiring|aannemen|recruit|talent|team)\b/i,
+            /\b(regulation|regulering|wetgeving|compliance|toezicht)\b/i,
+            /\b(competitor|concurrent|concurrentie|competit)\b/i,
+            /\b(investment|investering|investor|investeerder)\b/i,
+            /\b(technology|technologie|platform|infrastructure)\b/i,
+            /\b(customer|klant|gebruiker|user)s?\s*(growth|groei|base|bestand)/i,
+        ];
+
+        // LOW relevance: noise for an investor
+        const LOW_RELEVANCE = [
+            /\b(shirt|jersey|tenue|kit|merchandise|merch)\b/i,
+            /\b(fan|supporter|wedstrijd|match|game|score|goal|doelpunt)\b/i,
+            /\b(recipe|recept|lifestyle|fashion|mode|outfit|look)\b/i,
+            /\b(celebrity|beroemdheid|influencer|instagram|tiktok|viral)\b/i,
+            /\b(coupon|korting|discount|aanbieding|sale|actie|deal of the)\b/i,
+            /\b(review|recensie|unboxing|hands.on|how.to|tutorial)\b/i,
+            /\b(weather|weer|horoscoop|horoscope)\b/i,
+            /\b(gossip|roddel|scandal|schandaal)\b/i,
+            /\b(playlist|concert|festival|album|song|nummer)\b/i,
+        ];
+
+        function scoreRelevance(title, source) {
+            const text = (title + ' ' + source).toLowerCase();
+            let score = 0;
+
+            for (const pattern of HIGH_RELEVANCE) {
+                if (pattern.test(text)) score += 10;
+            }
+            for (const pattern of MEDIUM_RELEVANCE) {
+                if (pattern.test(text)) score += 4;
+            }
+            for (const pattern of LOW_RELEVANCE) {
+                if (pattern.test(text)) score -= 15;
+            }
+
+            // Boost if from known business/financial sources
+            const businessSources = /\b(bloomberg|reuters|financial times|ft\.com|wsj|wall street|techcrunch|crunchbase|pitchbook|venturebeat|forbes|fortune|cnbc|fd|financieele dagblad|rtl z|bnr)\b/i;
+            if (businessSources.test(source) || businessSources.test(text)) {
+                score += 5;
+            }
+
+            return score;
+        }
+
+        // Minimum relevance threshold to show an article
+        const RELEVANCE_THRESHOLD = 4;
 
         // Multiple CORS proxies for fallback
         const CORS_PROXIES = [
@@ -692,11 +775,24 @@
             // Filter by date range
             all = filterByDateRange(all);
 
-            // Sort by date (newest first)
-            all.sort((a, b) => b.date - a.date);
+            // Score each article on investment relevance
+            all = all.map(item => ({
+                ...item,
+                relevance: scoreRelevance(item.title, item.source)
+            }));
 
-            // Limit results
-            const maxItems = state.period === 'day' ? 10 : state.period === 'week' ? 40 : 100;
+            // Filter out low-relevance noise
+            all = all.filter(item => item.relevance >= RELEVANCE_THRESHOLD);
+
+            // Sort by relevance first, then by date
+            all.sort((a, b) => {
+                if (b.relevance !== a.relevance) return b.relevance - a.relevance;
+                return b.date - a.date;
+            });
+
+            // Strict limit: 0-10 per day as promised
+            const days = state.period === 'day' ? 1 : state.period === 'week' ? 7 : 30;
+            const maxItems = Math.min(days * 10, 100);
             newsItems = all.slice(0, maxItems);
 
             // Show status
@@ -774,8 +870,8 @@
                             <span class="company-dot" style="background:${escapeHtml(item.color)}"></span>
                             ${escapeHtml(item.company)}
                         </span>
-                        ${websiteHost ? `<span class="news-type">${escapeHtml(websiteHost)}</span>` : ''}
                         ${item.source ? `<span class="news-type">${escapeHtml(item.source)}</span>` : ''}
+                        <span class="news-type" style="background:rgba(52,211,153,${Math.min(item.relevance / 30, 1) * 0.25});color:var(--green)">${item.relevance >= 10 ? 'Hoog' : 'Medium'}</span>
                         <span class="news-date">${escapeHtml(item.dateStr)}</span>
                     </div>
                     <div class="news-title">${escapeHtml(item.title)}</div>
