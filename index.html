@@ -146,6 +146,7 @@
             transition: border-color 0.15s;
         }
 
+        .news-card { cursor: pointer; text-decoration: none; display: block; color: inherit; }
         .news-card:hover { border-color: var(--accent); }
 
         .news-card-header {
@@ -425,8 +426,11 @@
         // --- State ---
         const STORAGE_KEY = 'portfolio-dealflow';
         const COLORS = ['#6c7cff','#34d399','#f87171','#fbbf24','#a855f7','#ec4899','#06b6d4','#f97316','#84cc16','#64748b'];
+        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
         let state = loadState();
+        let newsItems = [];
+        let isLoading = false;
 
         function defaultState() {
             return {
@@ -437,7 +441,6 @@
                     { name: 'Klarna', sector: 'Fintech', color: COLORS[3] },
                     { name: 'Canva', sector: 'Design', color: COLORS[4] },
                 ],
-                newsCache: {},
                 period: 'day'
             };
         }
@@ -457,175 +460,95 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         }
 
-        // --- News Generation ---
-        // Simulated realistic news engine. In production, replace with API calls to
-        // a news aggregator (e.g. NewsAPI, Google News, or custom LLM pipeline).
-
-        const NEWS_TEMPLATES = {
-            funding: [
-                '{company} sluit Series {round} financieringsronde af van ${amount}M',
-                '{company} haalt ${amount}M op in nieuwe investeringsronde',
-                'Nieuwe financiering voor {company}: ${amount}M tegen hogere waardering',
-            ],
-            product: [
-                '{company} lanceert nieuw platform voor enterprise klanten',
-                '{company} kondigt grote product-update aan',
-                '{company} breidt productaanbod uit naar nieuwe markt',
-                '{company} introduceert AI-gedreven features in kernproduct',
-            ],
-            partnership: [
-                '{company} tekent strategisch partnership met Fortune 500-bedrijf',
-                '{company} gaat samenwerking aan met grote speler in {sector}',
-                'Nieuwe integratie: {company} partnert met marktleider',
-            ],
-            hiring: [
-                '{company} breidt team uit met 200+ nieuwe medewerkers',
-                '{company} opent nieuw kantoor in Europa',
-                'Nieuwe CEO aangesteld bij {company}',
-                '{company} werft ex-Google VP aan als CTO',
-            ],
-            exit: [
-                'Geruchten over mogelijke IPO van {company}',
-                '{company} verkent strategische opties waaronder verkoop',
-                'Marktanalisten verwachten {company} IPO in komende kwartalen',
-            ],
-            general: [
-                '{company} rapporteert sterke kwartaalcijfers',
-                'Analisten verhogen waardering {company}',
-                '{company} wint industrie-award voor innovatie',
-                '{company} ziet sterke groei in {sector} segment',
-            ]
-        };
-
-        const SUMMARIES = {
-            funding: [
-                'De ronde werd geleid door bekende investeerders uit Silicon Valley. Het bedrijf plant het kapitaal in te zetten voor internationale expansie en productontwikkeling.',
-                'Met deze investering stijgt de totale funding naar meer dan $1B. Het bedrijf groeit sterk in zowel omzet als klantenbestand.',
-            ],
-            product: [
-                'De nieuwe features zijn gericht op enterprise-klanten en moeten de positie in de markt verder versterken. Beta-testers rapporteren positieve resultaten.',
-                'Het product richt zich op een groeiend marktsegment en speelt in op de toenemende vraag vanuit grote ondernemingen.',
-            ],
-            partnership: [
-                'Het partnership biedt toegang tot een nieuw klantsegment en versterkt de go-to-market strategie van beide partijen.',
-                'De samenwerking combineert complementaire technologieen en opent nieuwe distributiemogelijkheden.',
-            ],
-            hiring: [
-                'De uitbreiding weerspiegelt de sterke groeifase van het bedrijf. Het nieuwe talent wordt ingezet op R&D en verkoop.',
-                'Met de nieuwe aanstellingen richt het bedrijf zich op versnelde groei in de komende twee jaar.',
-            ],
-            exit: [
-                'Bronnen dicht bij het bedrijf bevestigen dat er gesprekken lopen met investeringsbanken. Een definitief besluit is nog niet genomen.',
-                'De marktomstandigheden worden als gunstig beschouwd voor een publieke notering in de huidige marktcyclus.',
-            ],
-            general: [
-                'Het bedrijf blijft sterke prestaties neerzetten ondanks de uitdagende marktomstandigheden.',
-                'Analisten zijn optimistisch over de vooruitzichten op basis van recente datapunten en markttrends.',
-            ]
-        };
-
-        function seededRandom(seed) {
-            let s = seed;
-            return function() {
-                s = (s * 16807 + 0) % 2147483647;
-                return (s - 1) / 2147483646;
-            };
+        // --- Google News RSS ---
+        function getPeriodParam(period) {
+            if (period === 'day') return 'when:1d';
+            if (period === 'week') return 'when:7d';
+            return 'when:30d';
         }
 
-        function dateToSeed(dateStr) {
-            let hash = 0;
-            for (let i = 0; i < dateStr.length; i++) {
-                hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
-                hash |= 0;
+        async function fetchNewsForCompany(company) {
+            const query = encodeURIComponent(company.name);
+            const when = getPeriodParam(state.period);
+            const rssUrl = `https://news.google.com/rss/search?q=${query}+${when}&hl=nl&gl=NL&ceid=NL:nl`;
+            const url = CORS_PROXY + encodeURIComponent(rssUrl);
+
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error('Fetch failed');
+                const text = await resp.text();
+                return parseRSS(text, company);
+            } catch (e) {
+                console.warn(`Nieuws ophalen mislukt voor ${company.name}:`, e);
+                return [];
             }
-            return Math.abs(hash);
         }
 
-        function generateNewsForDate(dateStr) {
-            const companies = state.companies;
-            if (companies.length === 0) return [];
+        function parseRSS(xmlText, company) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(xmlText, 'text/xml');
+            const items = doc.querySelectorAll('item');
+            const results = [];
 
-            const rng = seededRandom(dateToSeed(dateStr));
-            const types = Object.keys(NEWS_TEMPLATES);
+            items.forEach(item => {
+                const title = item.querySelector('title')?.textContent || '';
+                const link = item.querySelector('link')?.textContent || '';
+                const pubDate = item.querySelector('pubDate')?.textContent || '';
+                const source = item.querySelector('source')?.textContent || '';
 
-            // 0-10 items per day, weighted toward fewer items
-            const weights = [0.15, 0.20, 0.20, 0.18, 0.12, 0.07, 0.04, 0.02, 0.01, 0.005, 0.005];
-            let r = rng();
-            let cumulative = 0;
-            let count = 0;
-            for (let i = 0; i < weights.length; i++) {
-                cumulative += weights[i];
-                if (r < cumulative) { count = i; break; }
-            }
-            count = Math.min(count, companies.length * 2);
+                // Clean title: Google News appends " - Source" at the end
+                const cleanTitle = title.replace(/\s*-\s*[^-]+$/, '');
 
-            const items = [];
-            for (let i = 0; i < count; i++) {
-                const company = companies[Math.floor(rng() * companies.length)];
-                const type = types[Math.floor(rng() * types.length)];
-                const templates = NEWS_TEMPLATES[type];
-                const template = templates[Math.floor(rng() * templates.length)];
-                const summaryOptions = SUMMARIES[type];
-                const summary = summaryOptions[Math.floor(rng() * summaryOptions.length)];
-
-                const rounds = ['B', 'C', 'D', 'E'];
-                const amounts = [50, 75, 100, 150, 200, 300, 500];
-
-                let title = template
-                    .replace('{company}', company.name)
-                    .replace('{sector}', company.sector || 'tech')
-                    .replace('{round}', rounds[Math.floor(rng() * rounds.length)])
-                    .replace('{amount}', amounts[Math.floor(rng() * amounts.length)]);
-
-                items.push({
+                results.push({
                     company: company.name,
                     color: company.color,
-                    type,
-                    title,
-                    summary,
-                    date: dateStr,
-                    source: 'dealflow-monitor'
+                    title: cleanTitle,
+                    link,
+                    source,
+                    date: pubDate ? new Date(pubDate) : new Date(),
+                    dateStr: pubDate ? formatDateFromDate(new Date(pubDate)) : ''
                 });
-            }
+            });
 
-            return items;
+            return results;
         }
 
-        function getDatesForPeriod(period) {
-            const dates = [];
-            const today = new Date();
-            let days = 1;
-            if (period === 'week') days = 7;
-            if (period === 'month') days = 30;
+        function filterByPeriod(items, period) {
+            const now = new Date();
+            let cutoff = new Date(now);
+            if (period === 'day') cutoff.setDate(now.getDate() - 1);
+            else if (period === 'week') cutoff.setDate(now.getDate() - 7);
+            else cutoff.setDate(now.getDate() - 30);
 
-            for (let i = 0; i < days; i++) {
-                const d = new Date(today);
-                d.setDate(today.getDate() - i);
-                dates.push(d.toISOString().split('T')[0]);
-            }
-            return dates;
+            return items.filter(item => item.date >= cutoff);
         }
 
-        function getAllNews(period) {
-            const dates = getDatesForPeriod(period);
-            let allNews = [];
-            for (const date of dates) {
-                allNews = allNews.concat(generateNewsForDate(date));
+        async function fetchAllNews() {
+            if (state.companies.length === 0) {
+                newsItems = [];
+                return;
             }
-            return allNews;
-        }
 
-        // --- Type labels ---
-        const TYPE_LABELS = {
-            funding: 'Funding',
-            product: 'Product',
-            partnership: 'Partnership',
-            hiring: 'Team',
-            exit: 'Exit',
-            general: 'Algemeen'
-        };
+            const promises = state.companies.map(c => fetchNewsForCompany(c));
+            const results = await Promise.all(promises);
+            let all = results.flat();
+
+            // Filter by period
+            all = filterByPeriod(all, state.period);
+
+            // Sort by date (newest first)
+            all.sort((a, b) => b.date - a.date);
+
+            // Limit to max 10 per day equivalent
+            const maxItems = state.period === 'day' ? 10 : state.period === 'week' ? 40 : 100;
+            newsItems = all.slice(0, maxItems);
+        }
 
         // --- Rendering ---
+        function formatDateFromDate(d) {
+            return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        }
+
         function renderDateDisplay() {
             const el = document.getElementById('date-display');
             const today = new Date();
@@ -647,41 +570,52 @@
             }
         }
 
+        function showLoading() {
+            const feed = document.getElementById('news-feed');
+            feed.innerHTML = Array(3).fill(`
+                <div class="loading-skeleton">
+                    <div class="skeleton-line short"></div>
+                    <div class="skeleton-line"></div>
+                    <div class="skeleton-line"></div>
+                </div>
+            `).join('');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         function renderFeed() {
             const feed = document.getElementById('news-feed');
-            const news = getAllNews(state.period);
 
-            if (news.length === 0) {
+            if (newsItems.length === 0) {
                 feed.innerHTML = `
                     <div class="empty-state">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                         </svg>
                         <p><strong>Geen nieuws gevonden</strong></p>
-                        <p>${state.companies.length === 0 ? 'Voeg eerst bedrijven toe aan je portfolio.' : 'Geen relevant dealflow nieuws voor deze periode.'}</p>
+                        <p>${state.companies.length === 0 ? 'Voeg eerst bedrijven toe aan je portfolio.' : 'Geen relevant dealflow nieuws voor deze periode. Klik op Vernieuwen om opnieuw te zoeken.'}</p>
                     </div>`;
                 return;
             }
 
-            feed.innerHTML = news.map(item => `
-                <div class="news-card">
+            feed.innerHTML = newsItems.map(item => `
+                <a class="news-card" href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer">
                     <div class="news-card-header">
                         <span class="company-badge">
-                            <span class="company-dot" style="background:${item.color}"></span>
-                            ${item.company}
+                            <span class="company-dot" style="background:${escapeHtml(item.color)}"></span>
+                            ${escapeHtml(item.company)}
                         </span>
-                        <span class="news-type type-${item.type}">${TYPE_LABELS[item.type]}</span>
-                        <span class="news-date">${formatDate(item.date)}</span>
+                        ${item.source ? `<span class="news-type type-general">${escapeHtml(item.source)}</span>` : ''}
+                        <span class="news-date">${escapeHtml(item.dateStr)}</span>
                     </div>
-                    <div class="news-title">${item.title}</div>
-                    <div class="news-summary">${item.summary}</div>
-                </div>
+                    <div class="news-title">${escapeHtml(item.title)}</div>
+                    <span class="news-source">Lees artikel &#8594;</span>
+                </a>
             `).join('');
-        }
-
-        function formatDate(dateStr) {
-            const d = new Date(dateStr + 'T12:00:00');
-            return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
         }
 
         function renderCompanyList() {
@@ -702,13 +636,28 @@
                     <div class="company-info">
                         <span class="company-color" style="background:${c.color}"></span>
                         <div>
-                            <div class="company-name">${c.name}</div>
-                            ${c.sector ? `<div class="company-sector">${c.sector}</div>` : ''}
+                            <div class="company-name">${escapeHtml(c.name)}</div>
+                            ${c.sector ? `<div class="company-sector">${escapeHtml(c.sector)}</div>` : ''}
                         </div>
                     </div>
                     <button class="remove-btn" data-index="${i}">Verwijderen</button>
                 </div>
             `).join('');
+        }
+
+        // --- Refresh handler ---
+        async function refreshNews() {
+            if (isLoading) return;
+            isLoading = true;
+            const btn = document.getElementById('refresh-btn');
+            btn.classList.add('loading');
+            showLoading();
+
+            await fetchAllNews();
+
+            btn.classList.remove('loading');
+            isLoading = false;
+            renderFeed();
         }
 
         // --- Event handlers ---
@@ -729,26 +678,11 @@
                 state.period = btn.dataset.period;
                 saveState();
                 renderDateDisplay();
-                renderFeed();
+                refreshNews();
             });
         });
 
-        document.getElementById('refresh-btn').addEventListener('click', function() {
-            this.classList.add('loading');
-            const feed = document.getElementById('news-feed');
-            feed.innerHTML = Array(3).fill(`
-                <div class="loading-skeleton">
-                    <div class="skeleton-line short"></div>
-                    <div class="skeleton-line"></div>
-                    <div class="skeleton-line"></div>
-                </div>
-            `).join('');
-
-            setTimeout(() => {
-                this.classList.remove('loading');
-                renderFeed();
-            }, 800);
-        });
+        document.getElementById('refresh-btn').addEventListener('click', refreshNews);
 
         document.getElementById('add-btn').addEventListener('click', addCompany);
         document.getElementById('company-input').addEventListener('keydown', (e) => {
@@ -786,8 +720,8 @@
 
         // --- Init ---
         renderDateDisplay();
-        renderFeed();
         renderCompanyList();
+        refreshNews();
     </script>
 </body>
 </html>
