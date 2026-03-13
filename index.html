@@ -1268,10 +1268,13 @@
                     </a>
                     <div class="news-card-footer">
                         <a class="news-source" href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer">Lees artikel &#8594;</a>
-                        <div class="feedback-buttons">
-                            <button class="feedback-btn irrelevant ${fb === 'irrelevant' ? 'active' : ''}" data-idx="${idx}" data-action="irrelevant" title="Niet relevant">&#10007;</button>
-                            <button class="feedback-btn relevant ${fb === 'relevant' ? 'active' : ''}" data-idx="${idx}" data-action="relevant" title="Wel relevant">&#10003;</button>
-                        </div>
+                        ${fb === 'relevant'
+                            ? `<span style="font-size:12px;color:var(--green);">&#10003; Goedgekeurd</span>`
+                            : `<div class="feedback-buttons">
+                                <button class="feedback-btn irrelevant" data-idx="${idx}" data-action="irrelevant" title="Niet relevant">&#10007;</button>
+                                <button class="feedback-btn relevant" data-idx="${idx}" data-action="relevant" title="Wel relevant">&#10003;</button>
+                            </div>`
+                        }
                     </div>
                 </div>`;
             }).join('');
@@ -1452,19 +1455,11 @@
             if (!item) return;
 
             const key = articleKey(item);
-            const currentFeedback = feedback[key];
-
-            // Toggle: clicking same button again removes feedback
-            if (currentFeedback === action) {
-                delete feedback[key];
-            } else {
-                feedback[key] = action;
-            }
-
+            feedback[key] = action;
             saveFeedback();
 
-            // If marked irrelevant, remove from view with animation
-            if (feedback[key] === 'irrelevant') {
+            if (action === 'irrelevant') {
+                // Irrelevant: animate out and remove
                 const card = btn.closest('.news-card');
                 card.style.transition = 'opacity 0.3s, transform 0.3s';
                 card.style.opacity = '0';
@@ -1474,6 +1469,7 @@
                     renderFeed();
                 }, 300);
             } else {
+                // Relevant: approved - re-render to replace buttons with "Goedgekeurd"
                 renderFeed();
             }
         });
@@ -1709,7 +1705,7 @@
         }
 
         // --- Smart extraction from unstructured text (PDF) ---
-        // Focus: identify fund investments, portfolio companies, assets
+        // Focus: identify fund investments, portfolio companies, assets from fund documents
         function extractCompaniesFromText(text) {
             const companies = [];
             const seen = new Set();
@@ -1724,70 +1720,77 @@
                 urlMap[url] = context;
             }
 
-            // Keywords that signal a section listing portfolio companies / investments
-            const investmentContextWords = /\b(portfolio|investering|investment|belang|participatie|holding|deelneming|asset|positie|position|allocation|allocatie|company|bedrijf|onderneming|fund|fonds)\b/i;
+            // Summation/header lines that are NOT company names
+            const skipLine = /^(total|totaal|subtotal|sub-total|investments|investering|amounts|bedragen|amounts in|fund performance|unrealized|realized|date|datum|country|naam|name|company|overview|overzicht|portfolio|assets?|section|hoofdstuk|pagina|page|\d{1,2}\s)/i;
 
-            // Words that are definitely NOT company names (fund document noise)
-            const blacklist = /^(de|het|een|the|van|voor|met|door|over|naar|bij|uit|als|maar|dan|ook|nog|wel|niet|geen|dit|dat|die|der|des|ten|deze|alle|andere|meer|onze|ons|hun|zijn|haar|werd|wordt|worden|heeft|hebben|kan|kon|zal|zou|moet|mogen|laten|gaan|komen|maken|nemen|geven|pagina|page|totaal|total|datum|date|type|sector|naam|name|bedrijf|company|kwartaal|quarter|halfjaar|jaarverslag|annual|report|rendement|return|performance|toelichting|notes|risico|risk|disclaimer|samenvatting|summary|inhoudsopgave|contents|bijlage|appendix|index|cash|liquide|middelen|obligatie|bond|staatsobligatie|rente|interest|valuta|currency|koers|aandelen|markt|market|benchmark|volatiliteit|duration|maturity|looptijd|coupon|yield|spread|credit|rating|outlook|strategie|strategy|beleid|policy|beheerder|manager|bewaarder|custodian|accountant|auditor|bestuur|board|toezicht|supervision|kosten|costs|fee|vergoeding|waarde|value|netto|bruto|gross|net|per|ultimo|primo|einde|begin|start|end|januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)$/i;
-
-            // Score text segments that likely contain company listings
-            const textLower = text.toLowerCase();
-            const hasInvestmentContext = investmentContextWords.test(textLower);
-
-            // Strategy 1: Find text near investment-related headers/sections
-            // Look for company names that appear near investment keywords
             const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);
 
-            // Build context: track which lines are near investment-related sections
-            const contextWindow = 15; // lines of context
-            const investmentLines = new Set();
-            lines.forEach((line, i) => {
-                if (/\b(portfolio|invester|belang|participati|holding|deelnem|asset|positie|allocation|allocati|top.?\d+|overview|overzicht)\b/i.test(line)) {
-                    for (let j = Math.max(0, i - 2); j < Math.min(lines.length, i + contextWindow); j++) {
-                        investmentLines.add(j);
-                    }
-                }
-            });
+            // STRATEGY 1: Detect lines that are a company name followed by a date (DD-MM-YYYY)
+            // This is the most reliable pattern in fund performance tables
+            // e.g. "Hypersolid 08-01-2021 NL 11,078,986 ..."
+            // e.g. "Oppermann & Fuss 26-08-2022 GE ..."
+            // e.g. "VMN media 10-02-2022 NL ..."
+            const nameBeforeDateRegex = /^(.+?)\s+\d{2}[-\/]\d{2}[-\/]\d{4}/;
 
-            // Strategy 2: Look for structured entries (name + percentage/amount patterns)
-            const companyWithDataRegex = /^([A-Z][A-Za-z0-9\s&.'\-\/,]+?)\s+[\d,.]+\s*%/;
-            const companyWithAmountRegex = /^([A-Z][A-Za-z0-9\s&.'\-\/,]+?)\s+[\d,.]+(?:\s*(?:EUR|USD|GBP|mln|mrd|k|M|B))?$/;
+            // STRATEGY 2: Company name followed by a country code (2-letter)
+            // e.g. "Hypersolid NL" or after date "... NL 11,078,986"
+            const nameBeforeCountryRegex = /^(.+?)\s+(?:NL|BE|DE|GE|FR|UK|US|LU|IE|CH|AT|IT|ES|SE|DK|NO|FI)\b/;
+
+            // STRATEGY 3: Company name followed by large numbers (investment amounts)
+            // e.g. "Hypersolid 11,078,986 5,491,553"
+            const nameBeforeAmountRegex = /^(.+?)\s+[\d,.]{4,}/;
+
+            // STRATEGY 4: Company name followed by a percentage at end of line
+            const nameBeforePctRegex = /^(.+?)\s+[-\d,.]+\s*%/;
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                if (line.length < 2 || line.length > 100) continue;
+                if (line.length < 2 || line.length > 200) continue;
+                if (skipLine.test(line)) continue;
 
                 let candidateName = null;
 
-                // Pattern A: Company name followed by percentage (typical fund report)
-                let m = line.match(companyWithDataRegex);
+                // Try patterns in order of reliability
+                let m = line.match(nameBeforeDateRegex);
                 if (m) candidateName = m[1].trim();
 
-                // Pattern B: Company name followed by amount
                 if (!candidateName) {
-                    m = line.match(companyWithAmountRegex);
+                    m = line.match(nameBeforeCountryRegex);
                     if (m) candidateName = m[1].trim();
                 }
 
-                // Pattern C: Standalone company name in investment context section
-                if (!candidateName && (investmentLines.has(i) || !hasInvestmentContext)) {
-                    // Only match clean capitalized names (likely company)
-                    m = line.match(/^([A-Z][A-Za-z0-9]+(?:[\s&.\-][A-Za-z0-9]+){0,4})$/);
-                    if (m && investmentLines.has(i)) candidateName = m[1].trim();
+                if (!candidateName) {
+                    m = line.match(nameBeforeAmountRegex);
+                    if (m) candidateName = m[1].trim();
+                }
+
+                if (!candidateName) {
+                    m = line.match(nameBeforePctRegex);
+                    if (m) candidateName = m[1].trim();
                 }
 
                 if (!candidateName) continue;
+
+                // Clean up: remove trailing dates/numbers that might have been captured
+                candidateName = candidateName.replace(/\s+\d{2}[-\/]\d{2}[-\/]\d{4}.*$/, '').trim();
+                candidateName = candidateName.replace(/\s+\d[\d,.]*$/, '').trim();
+
+                // Validate the candidate
                 if (candidateName.length < 2 || candidateName.length > 60) continue;
-                if (candidateName.split(/\s+/).length > 5) continue;
-                if (blacklist.test(candidateName)) continue;
-                // Skip if it's a number, date, or percentage
-                if (/^\d/.test(candidateName) || /^\d{1,2}[\/-]/.test(candidateName)) continue;
+                if (candidateName.split(/\s+/).length > 6) continue;
+
+                // Must start with a letter (handles umlauts like Höfer, accented chars)
+                if (!/^[A-Za-zÀ-ÿ]/.test(candidateName)) continue;
+
+                // Skip pure numbers, dates, single common words
+                if (/^\d/.test(candidateName)) continue;
+                if (/^(de|het|een|the|van|voor|met|door|over|naar|bij|uit|als|maar|dan|ook|nog|wel|niet|geen|dit|dat|die|total|totaal|sub|amounts?|date|datum|fund|investments?|unrealized|realized|gross|net|netto|bruto|per|cash|liquide|obligatie|rente|kosten|waarde|value|pagina|page)$/i.test(candidateName)) continue;
 
                 const key = candidateName.toLowerCase();
                 if (seen.has(key)) continue;
                 seen.add(key);
 
-                // Try to find associated URL
+                // Try to find associated URL in the document
                 let website = '';
                 for (const [url, context] of Object.entries(urlMap)) {
                     if (context.toLowerCase().includes(candidateName.toLowerCase())) {
@@ -1802,7 +1805,7 @@
                 companies.push({ name: candidateName, website, sector: '' });
             }
 
-            return companies.slice(0, 50);
+            return companies.slice(0, 100);
         }
 
         // --- Import modal ---
