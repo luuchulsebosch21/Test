@@ -1579,212 +1579,109 @@
         async function parsePDF(file) {
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let fullText = '';
+
+            // Collect all text items with their positions across all pages
+            const allRows = [];
+            let allTextFlat = '';
 
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const content = await page.getTextContent();
-                const pageText = content.items.map(item => item.str).join(' ');
-                fullText += pageText + '\n';
-            }
 
-            return extractCompaniesFromText(fullText);
-        }
+                // Group text items by Y position (same row in table)
+                // transform[5] = Y position, transform[4] = X position
+                const yGroups = {};
+                const yTolerance = 3; // pixels tolerance for same row
 
-        // --- Excel parsing ---
-        async function parseExcel(file) {
-            const arrayBuffer = await file.arrayBuffer();
-            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-
-            const allCompanies = [];
-
-            for (const sheetName of workbook.SheetNames) {
-                const sheet = workbook.Sheets[sheetName];
-                const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-                if (data.length < 1) continue;
-
-                const companies = extractCompaniesFromTable(data);
-                allCompanies.push(...companies);
-            }
-
-            // Deduplicate
-            const seen = new Set();
-            return allCompanies.filter(c => {
-                const key = c.name.toLowerCase();
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            });
-        }
-
-        // --- CSV parsing ---
-        async function parseCSV(file) {
-            const text = await file.text();
-            const rows = text.split('\n').map(row => {
-                // Simple CSV parse (handles quoted fields)
-                const result = [];
-                let current = '';
-                let inQuotes = false;
-                for (const char of row) {
-                    if (char === '"') { inQuotes = !inQuotes; }
-                    else if ((char === ',' || char === ';') && !inQuotes) { result.push(current.trim()); current = ''; }
-                    else { current += char; }
+                for (const item of content.items) {
+                    if (!item.str || !item.str.trim()) continue;
+                    const y = Math.round(item.transform[5] / yTolerance) * yTolerance;
+                    const x = item.transform[4];
+                    if (!yGroups[y]) yGroups[y] = [];
+                    yGroups[y].push({ text: item.str.trim(), x, y: item.transform[5] });
                 }
-                result.push(current.trim());
-                return result;
-            });
-            return extractCompaniesFromTable(rows);
-        }
 
-        // --- Smart extraction from tabular data ---
-        function extractCompaniesFromTable(rows) {
-            if (rows.length < 2) return [];
+                // Sort rows by Y (top to bottom = descending Y in PDF coords)
+                const sortedYs = Object.keys(yGroups).map(Number).sort((a, b) => b - a);
 
-            const header = rows[0].map(h => String(h || '').toLowerCase().trim());
-
-            // Find relevant columns by matching header names
-            const nameAliases = ['company', 'bedrijf', 'naam', 'name', 'bedrijfsnaam', 'portfolio', 'asset', 'investment', 'investering', 'onderneming', 'target', 'entity'];
-            const websiteAliases = ['website', 'url', 'site', 'web', 'link', 'homepage', 'domein', 'domain'];
-            const sectorAliases = ['sector', 'industry', 'branche', 'categorie', 'category', 'segment', 'type', 'industrie'];
-
-            let nameCol = -1, websiteCol = -1, sectorCol = -1;
-
-            for (let i = 0; i < header.length; i++) {
-                const h = header[i];
-                if (nameCol === -1 && nameAliases.some(a => h.includes(a))) nameCol = i;
-                if (websiteCol === -1 && websiteAliases.some(a => h.includes(a))) websiteCol = i;
-                if (sectorCol === -1 && sectorAliases.some(a => h.includes(a))) sectorCol = i;
-            }
-
-            // If no name column found, try first text column
-            if (nameCol === -1) {
-                for (let i = 0; i < header.length; i++) {
-                    if (header[i] && typeof rows[1]?.[i] === 'string' && rows[1][i].trim().length > 0) {
-                        nameCol = i;
-                        break;
-                    }
+                for (const y of sortedYs) {
+                    // Sort items in row by X position (left to right)
+                    const rowItems = yGroups[y].sort((a, b) => a.x - b.x);
+                    allRows.push(rowItems);
+                    allTextFlat += rowItems.map(r => r.text).join(' ') + '\n';
                 }
             }
 
-            if (nameCol === -1) return [];
-
-            const companies = [];
-
-            for (let r = 1; r < rows.length; r++) {
-                const row = rows[r];
-                if (!row || !row[nameCol]) continue;
-
-                const name = String(row[nameCol]).trim();
-                if (!name || name.length < 2 || name.length > 80) continue;
-                // Skip rows that look like subtotals, headers, etc.
-                if (/^(totaal|total|subtotal|som|gemiddeld|average|#|nr)/i.test(name)) continue;
-
-                let website = websiteCol >= 0 ? String(row[websiteCol] || '').trim() : '';
-                const sector = sectorCol >= 0 ? String(row[sectorCol] || '').trim() : '';
-
-                // Try to find a URL in any cell of the row if no website column
-                if (!website) {
-                    for (const cell of row) {
-                        const cellStr = String(cell || '');
-                        const urlMatch = cellStr.match(/https?:\/\/[^\s,;]+|www\.[^\s,;]+|\b[\w-]+\.(com|nl|io|co|org|net|eu|de|be|app|tech|ai)\b/i);
-                        if (urlMatch) {
-                            website = urlMatch[0];
-                            break;
-                        }
-                    }
-                }
-
-                if (website && !website.startsWith('http')) {
-                    website = 'https://' + website.replace(/^www\./, '');
-                }
-
-                companies.push({ name, website, sector });
-            }
-
-            return companies;
-        }
-
-        // --- Smart extraction from unstructured text (PDF) ---
-        // Focus: identify fund investments, portfolio companies, assets from fund documents
-        function extractCompaniesFromText(text) {
-            const companies = [];
-            const seen = new Set();
-
-            // Extract all URLs for later matching
+            // Extract URLs from full text for later matching
             const urlMap = {};
             const urlRegex = /(https?:\/\/[^\s,;)]+|www\.[^\s,;)]+)/gi;
             let urlMatch;
-            while ((urlMatch = urlRegex.exec(text)) !== null) {
+            while ((urlMatch = urlRegex.exec(allTextFlat)) !== null) {
                 const url = urlMatch[1];
-                const context = text.substring(Math.max(0, urlMatch.index - 150), urlMatch.index + url.length + 150);
+                const context = allTextFlat.substring(Math.max(0, urlMatch.index - 150), urlMatch.index + url.length + 150);
                 urlMap[url] = context;
             }
 
-            // Summation/header lines that are NOT company names
-            const skipLine = /^(total|totaal|subtotal|sub-total|investments|investering|amounts|bedragen|amounts in|fund performance|unrealized|realized|date|datum|country|naam|name|company|overview|overzicht|portfolio|assets?|section|hoofdstuk|pagina|page|\d{1,2}\s)/i;
+            // Now extract companies from the structured rows
+            return extractCompaniesFromRows(allRows, urlMap, allTextFlat);
+        }
 
-            const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);
+        function extractCompaniesFromRows(rows, urlMap, fullText) {
+            const companies = [];
+            const seen = new Set();
 
-            // STRATEGY 1: Detect lines that are a company name followed by a date (DD-MM-YYYY)
-            // This is the most reliable pattern in fund performance tables
-            // e.g. "Hypersolid 08-01-2021 NL 11,078,986 ..."
-            // e.g. "Oppermann & Fuss 26-08-2022 GE ..."
-            // e.g. "VMN media 10-02-2022 NL ..."
-            const nameBeforeDateRegex = /^(.+?)\s+\d{2}[-\/]\d{2}[-\/]\d{4}/;
+            // Words/phrases that indicate this is NOT a company name
+            const blacklist = /^(de|het|een|the|van|voor|met|door|over|naar|bij|uit|als|total|totaal|subtotal|sub-total|investments?|investering|amounts?|bedragen|fund|performance|unrealized|realized|date|datum|country|naam|name|company|overview|overzicht|portfolio|assets?|pagina|page|disclaimer|notes|toelichting|section|risk|risico|summary|samenvatting|rendement|return|benchmark|cash|liquide|obligatie|bond|rente|interest|kosten|costs|fee|waarde|value|netto|bruto|gross|net|per|ultimo|einde|begin|start|end|kwartaal|quarter|halfjaar|jaarverslag|annual|report|amounts in|book value|capital|fair|market|proceeds|gross irr|moi|ipev)$/i;
 
-            // STRATEGY 2: Company name followed by a country code (2-letter)
-            // e.g. "Hypersolid NL" or after date "... NL 11,078,986"
-            const nameBeforeCountryRegex = /^(.+?)\s+(?:NL|BE|DE|GE|FR|UK|US|LU|IE|CH|AT|IT|ES|SE|DK|NO|FI)\b/;
+            // Detect if a text is purely numeric / date / percentage
+            function isDataCell(text) {
+                const t = text.replace(/[\s,.\-\/€$%()]+/g, '');
+                // Pure numbers (possibly with decimals, thousands separators)
+                if (/^\d+$/.test(t)) return true;
+                // Dates like 08-01-2021 or 08/01/2021
+                if (/^\d{2}[-\/]\d{2}[-\/]\d{4}$/.test(text.trim())) return true;
+                // Percentages
+                if (/^[-\d,.]+\s*%$/.test(text.trim())) return true;
+                // Country codes
+                if (/^(NL|BE|DE|GE|FR|UK|US|LU|IE|CH|AT|IT|ES|SE|DK|NO|FI)$/.test(text.trim())) return true;
+                // Currency amounts
+                if (/^[€$£]?\s*[\d,.]+$/.test(text.trim())) return true;
+                // Dash or empty
+                if (/^[-–—]+$/.test(text.trim())) return true;
+                return false;
+            }
 
-            // STRATEGY 3: Company name followed by large numbers (investment amounts)
-            // e.g. "Hypersolid 11,078,986 5,491,553"
-            const nameBeforeAmountRegex = /^(.+?)\s+[\d,.]{4,}/;
+            // For each row, take the leftmost non-numeric text as potential company name
+            for (const row of rows) {
+                if (row.length === 0) continue;
 
-            // STRATEGY 4: Company name followed by a percentage at end of line
-            const nameBeforePctRegex = /^(.+?)\s+[-\d,.]+\s*%/;
-
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                if (line.length < 2 || line.length > 200) continue;
-                if (skipLine.test(line)) continue;
-
+                // Find the first cell that is NOT purely data
                 let candidateName = null;
+                for (const cell of row) {
+                    const text = cell.text.trim();
+                    if (!text || text.length < 2) continue;
+                    if (isDataCell(text)) continue;
 
-                // Try patterns in order of reliability
-                let m = line.match(nameBeforeDateRegex);
-                if (m) candidateName = m[1].trim();
-
-                if (!candidateName) {
-                    m = line.match(nameBeforeCountryRegex);
-                    if (m) candidateName = m[1].trim();
-                }
-
-                if (!candidateName) {
-                    m = line.match(nameBeforeAmountRegex);
-                    if (m) candidateName = m[1].trim();
-                }
-
-                if (!candidateName) {
-                    m = line.match(nameBeforePctRegex);
-                    if (m) candidateName = m[1].trim();
+                    // This cell contains text - potential company name
+                    candidateName = text;
+                    break;
                 }
 
                 if (!candidateName) continue;
+                if (candidateName.length < 2 || candidateName.length > 80) continue;
 
-                // Clean up: remove trailing dates/numbers that might have been captured
-                candidateName = candidateName.replace(/\s+\d{2}[-\/]\d{2}[-\/]\d{4}.*$/, '').trim();
-                candidateName = candidateName.replace(/\s+\d[\d,.]*$/, '').trim();
+                // Check if this row also has numeric data (indicates it's a data row, not a header)
+                const hasNumericData = row.some(cell => /[\d,.]{3,}/.test(cell.text) && !/^\d{2}[-\/]\d{2}/.test(cell.text));
 
-                // Validate the candidate
-                if (candidateName.length < 2 || candidateName.length > 60) continue;
-                if (candidateName.split(/\s+/).length > 6) continue;
+                // Skip known headers/labels
+                if (blacklist.test(candidateName)) continue;
+                if (/^(amounts in|book value|capital invested|fair market|gross irr)/i.test(candidateName)) continue;
 
-                // Must start with a letter (handles umlauts like Höfer, accented chars)
+                // Must start with a letter (handles umlauts, accented chars)
                 if (!/^[A-Za-zÀ-ÿ]/.test(candidateName)) continue;
 
-                // Skip pure numbers, dates, single common words
-                if (/^\d/.test(candidateName)) continue;
-                if (/^(de|het|een|the|van|voor|met|door|over|naar|bij|uit|als|maar|dan|ook|nog|wel|niet|geen|dit|dat|die|total|totaal|sub|amounts?|date|datum|fund|investments?|unrealized|realized|gross|net|netto|bruto|per|cash|liquide|obligatie|rente|kosten|waarde|value|pagina|page)$/i.test(candidateName)) continue;
+                // Skip very long phrases (likely paragraph text, not a name)
+                if (candidateName.split(/\s+/).length > 6) continue;
 
                 const key = candidateName.toLowerCase();
                 if (seen.has(key)) continue;
@@ -1805,7 +1702,196 @@
                 companies.push({ name: candidateName, website, sector: '' });
             }
 
+            // If positional extraction found very few, also try the flat text approach as fallback
+            if (companies.length < 2) {
+                const fallback = extractCompaniesFromFlatText(fullText, urlMap);
+                for (const c of fallback) {
+                    if (!seen.has(c.name.toLowerCase())) {
+                        seen.add(c.name.toLowerCase());
+                        companies.push(c);
+                    }
+                }
+            }
+
             return companies.slice(0, 100);
+        }
+
+        // Fallback: extract from flat text when positional extraction fails
+        function extractCompaniesFromFlatText(text, urlMap) {
+            const companies = [];
+            const seen = new Set();
+            const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);
+
+            const skipLine = /^(total|totaal|subtotal|sub-total|investments?|investering|amounts|bedragen|fund performance|unrealized|realized|date|datum|country|naam|name|company|overview|overzicht|portfolio|assets?|pagina|page|amounts in|book value|capital|disclaimer)/i;
+
+            const nameBeforeDateRegex = /^(.+?)\s+\d{2}[-\/]\d{2}[-\/]\d{4}/;
+            const nameBeforeCountryRegex = /^(.+?)\s+(?:NL|BE|DE|GE|FR|UK|US|LU|IE|CH|AT|IT|ES|SE|DK|NO|FI)\b/;
+            const nameBeforeAmountRegex = /^(.+?)\s+[\d,.]{4,}/;
+            const nameBeforePctRegex = /^(.+?)\s+[-\d,.]+\s*%/;
+
+            for (const line of lines) {
+                if (line.length < 2 || line.length > 200) continue;
+                if (skipLine.test(line)) continue;
+
+                let candidateName = null;
+                let m;
+
+                m = line.match(nameBeforeDateRegex);
+                if (m) candidateName = m[1].trim();
+
+                if (!candidateName) {
+                    m = line.match(nameBeforeCountryRegex);
+                    if (m) candidateName = m[1].trim();
+                }
+
+                if (!candidateName) {
+                    m = line.match(nameBeforeAmountRegex);
+                    if (m) candidateName = m[1].trim();
+                }
+
+                if (!candidateName) {
+                    m = line.match(nameBeforePctRegex);
+                    if (m) candidateName = m[1].trim();
+                }
+
+                if (!candidateName) continue;
+
+                candidateName = candidateName.replace(/\s+\d{2}[-\/]\d{2}[-\/]\d{4}.*$/, '').trim();
+                candidateName = candidateName.replace(/\s+\d[\d,.]*$/, '').trim();
+
+                if (candidateName.length < 2 || candidateName.length > 60) continue;
+                if (!/^[A-Za-zÀ-ÿ]/.test(candidateName)) continue;
+                if (/^(de|het|een|the|van|voor|met|total|totaal|amounts?|date|datum|fund|investments?|unrealized|realized|gross|net|per|cash|pagina|page)$/i.test(candidateName)) continue;
+
+                const key = candidateName.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+
+                let website = '';
+                for (const [url, context] of Object.entries(urlMap || {})) {
+                    if (context.toLowerCase().includes(candidateName.toLowerCase())) {
+                        website = url;
+                        break;
+                    }
+                }
+                if (website && !website.startsWith('http')) website = 'https://' + website;
+
+                companies.push({ name: candidateName, website, sector: '' });
+            }
+
+            return companies;
+        }
+
+        // Keep for backward compat with flat text calls
+        function extractCompaniesFromText(text) {
+            return extractCompaniesFromFlatText(text, {});
+        }
+
+        // --- Excel parsing ---
+        async function parseExcel(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+
+            const allCompanies = [];
+
+            for (const sheetName of workbook.SheetNames) {
+                const sheet = workbook.Sheets[sheetName];
+                const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                if (data.length < 1) continue;
+
+                const companies = extractCompaniesFromTable(data);
+                allCompanies.push(...companies);
+            }
+
+            const seen = new Set();
+            return allCompanies.filter(c => {
+                const key = c.name.toLowerCase();
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+        }
+
+        // --- CSV parsing ---
+        async function parseCSV(file) {
+            const text = await file.text();
+            const rows = text.split('\n').map(row => {
+                const result = [];
+                let current = '';
+                let inQuotes = false;
+                for (const char of row) {
+                    if (char === '"') { inQuotes = !inQuotes; }
+                    else if ((char === ',' || char === ';') && !inQuotes) { result.push(current.trim()); current = ''; }
+                    else { current += char; }
+                }
+                result.push(current.trim());
+                return result;
+            });
+            return extractCompaniesFromTable(rows);
+        }
+
+        // --- Smart extraction from tabular data (Excel/CSV) ---
+        function extractCompaniesFromTable(rows) {
+            if (rows.length < 2) return [];
+
+            const header = rows[0].map(h => String(h || '').toLowerCase().trim());
+
+            const nameAliases = ['company', 'bedrijf', 'naam', 'name', 'bedrijfsnaam', 'portfolio', 'asset', 'investment', 'investering', 'onderneming', 'target', 'entity'];
+            const websiteAliases = ['website', 'url', 'site', 'web', 'link', 'homepage', 'domein', 'domain'];
+            const sectorAliases = ['sector', 'industry', 'branche', 'categorie', 'category', 'segment', 'type', 'industrie'];
+
+            let nameCol = -1, websiteCol = -1, sectorCol = -1;
+
+            for (let i = 0; i < header.length; i++) {
+                const h = header[i];
+                if (nameCol === -1 && nameAliases.some(a => h.includes(a))) nameCol = i;
+                if (websiteCol === -1 && websiteAliases.some(a => h.includes(a))) websiteCol = i;
+                if (sectorCol === -1 && sectorAliases.some(a => h.includes(a))) sectorCol = i;
+            }
+
+            if (nameCol === -1) {
+                for (let i = 0; i < header.length; i++) {
+                    if (header[i] && typeof rows[1]?.[i] === 'string' && rows[1][i].trim().length > 0) {
+                        nameCol = i;
+                        break;
+                    }
+                }
+            }
+
+            if (nameCol === -1) return [];
+
+            const companies = [];
+
+            for (let r = 1; r < rows.length; r++) {
+                const row = rows[r];
+                if (!row || !row[nameCol]) continue;
+
+                const name = String(row[nameCol]).trim();
+                if (!name || name.length < 2 || name.length > 80) continue;
+                if (/^(totaal|total|subtotal|som|gemiddeld|average|#|nr)/i.test(name)) continue;
+
+                let website = websiteCol >= 0 ? String(row[websiteCol] || '').trim() : '';
+                const sector = sectorCol >= 0 ? String(row[sectorCol] || '').trim() : '';
+
+                if (!website) {
+                    for (const cell of row) {
+                        const cellStr = String(cell || '');
+                        const urlMatch = cellStr.match(/https?:\/\/[^\s,;]+|www\.[^\s,;]+|\b[\w-]+\.(com|nl|io|co|org|net|eu|de|be|app|tech|ai)\b/i);
+                        if (urlMatch) {
+                            website = urlMatch[0];
+                            break;
+                        }
+                    }
+                }
+
+                if (website && !website.startsWith('http')) {
+                    website = 'https://' + website.replace(/^www\./, '');
+                }
+
+                companies.push({ name, website, sector });
+            }
+
+            return companies;
         }
 
         // --- Import modal ---
