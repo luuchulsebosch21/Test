@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Portfolio Dealflow</title>
     <style>
         :root {
@@ -230,6 +233,59 @@
         }
 
         .news-source:hover { text-decoration: underline; }
+
+        /* Relevance feedback buttons */
+        .feedback-buttons {
+            display: flex;
+            gap: 6px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .feedback-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.15s;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .feedback-btn:hover { background: var(--surface2); }
+
+        .feedback-btn.relevant {
+            color: var(--green);
+            border-color: var(--green);
+        }
+
+        .feedback-btn.relevant.active {
+            background: rgba(52, 211, 153, 0.2);
+            border-color: var(--green);
+        }
+
+        .feedback-btn.irrelevant {
+            color: var(--red);
+            border-color: var(--red);
+        }
+
+        .feedback-btn.irrelevant.active {
+            background: rgba(248, 113, 113, 0.2);
+            border-color: var(--red);
+        }
+
+        .news-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
 
         /* Empty & error states */
         .empty-state {
@@ -557,8 +613,8 @@
             return score;
         }
 
-        // Minimum relevance threshold to show an article
-        const RELEVANCE_THRESHOLD = 4;
+        // Minimum relevance threshold to show an article (lowered to show more results)
+        const RELEVANCE_THRESHOLD = 0;
 
         // Multiple CORS proxies for fallback
         const CORS_PROXIES = [
@@ -567,9 +623,46 @@
             url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
         ];
 
+        const FEEDBACK_KEY = 'portfolio-dealflow-feedback';
+
         let state = loadState();
+        let feedback = loadFeedback();  // { [articleKey]: 'relevant' | 'irrelevant' }
         let newsItems = [];
         let isLoading = false;
+
+        function loadFeedback() {
+            try {
+                const saved = localStorage.getItem(FEEDBACK_KEY);
+                return saved ? JSON.parse(saved) : {};
+            } catch(e) { return {}; }
+        }
+
+        function saveFeedback() {
+            localStorage.setItem(FEEDBACK_KEY, JSON.stringify(feedback));
+        }
+
+        function articleKey(item) {
+            return (item.company + '|' + item.title).substring(0, 200);
+        }
+
+        // Learn from feedback: boost/penalize keywords from marked articles
+        function getFeedbackScoreAdjustment(title, company) {
+            let adjustment = 0;
+            const titleWords = title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+
+            for (const [key, value] of Object.entries(feedback)) {
+                const [fbCompany, fbTitle] = key.split('|');
+                if (fbCompany !== company) continue;
+
+                const fbWords = (fbTitle || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
+                // Count overlapping words
+                const overlap = titleWords.filter(w => fbWords.includes(w)).length;
+                if (overlap >= 2) {
+                    adjustment += value === 'relevant' ? 3 : -5;
+                }
+            }
+            return adjustment;
+        }
 
         // --- State management ---
         function defaultState() {
@@ -658,38 +751,41 @@
         }
 
         async function fetchNewsForCompany(company) {
-            // Build investor-focused search query
-            const investorTerms = INVESTOR_KEYWORDS.slice(0, 6).join(' OR ');
             const dateParam = getGoogleNewsDateParam();
-            const query = `"${company.name}" (${investorTerms}) ${dateParam}`;
-            const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=nl&gl=NL&ceid=NL:nl`;
+            const items = [];
+            const seenTitles = new Set();
 
-            try {
-                const text = await fetchWithProxy(rssUrl);
-                const items = parseRSS(text, company);
-
-                // Also fetch broader results as fallback if few investor-specific hits
-                if (items.length < 3) {
-                    const broadQuery = `"${company.name}" ${dateParam}`;
-                    const broadUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(broadQuery)}&hl=nl&gl=NL&ceid=NL:nl`;
-                    try {
-                        const broadText = await fetchWithProxy(broadUrl);
-                        const broadItems = parseRSS(broadText, company);
-                        // Merge, avoiding duplicates
-                        const existingTitles = new Set(items.map(i => i.title));
-                        for (const item of broadItems) {
-                            if (!existingTitles.has(item.title)) {
-                                items.push(item);
-                            }
-                        }
-                    } catch(e) { /* ignore broad search failure */ }
+            function addItems(newItems) {
+                for (const item of newItems) {
+                    if (!seenTitles.has(item.title)) {
+                        seenTitles.add(item.title);
+                        items.push(item);
+                    }
                 }
-
-                return items;
-            } catch (e) {
-                console.warn(`Nieuws ophalen mislukt voor ${company.name}:`, e);
-                return [];
             }
+
+            // 1. Always fetch broad company results first (catches more news)
+            try {
+                const broadQuery = `"${company.name}" ${dateParam}`;
+                const broadUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(broadQuery)}&hl=nl&gl=NL&ceid=NL:nl`;
+                const broadText = await fetchWithProxy(broadUrl);
+                addItems(parseRSS(broadText, company));
+            } catch(e) {
+                console.warn(`Breed nieuws ophalen mislukt voor ${company.name}:`, e);
+            }
+
+            // 2. Also fetch investor-focused results
+            try {
+                const investorTerms = INVESTOR_KEYWORDS.slice(0, 6).join(' OR ');
+                const query = `"${company.name}" (${investorTerms}) ${dateParam}`;
+                const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=nl&gl=NL&ceid=NL:nl`;
+                const text = await fetchWithProxy(rssUrl);
+                addItems(parseRSS(text, company));
+            } catch(e) {
+                console.warn(`Investor nieuws ophalen mislukt voor ${company.name}:`, e);
+            }
+
+            return items;
         }
 
         function parseRSS(xmlText, company) {
@@ -775,14 +871,27 @@
             // Filter by date range
             all = filterByDateRange(all);
 
-            // Score each article on investment relevance
-            all = all.map(item => ({
-                ...item,
-                relevance: scoreRelevance(item.title, item.source)
-            }));
+            // Score each article on investment relevance + user feedback
+            all = all.map(item => {
+                const baseScore = scoreRelevance(item.title, item.source);
+                const feedbackAdj = getFeedbackScoreAdjustment(item.title, item.company);
+                const key = articleKey(item);
+                // If user explicitly marked irrelevant, hide it; if relevant, always show
+                const userVerdict = feedback[key];
+                return {
+                    ...item,
+                    relevance: baseScore + feedbackAdj,
+                    userFeedback: userVerdict || null
+                };
+            });
 
-            // Filter out low-relevance noise
-            all = all.filter(item => item.relevance >= RELEVANCE_THRESHOLD);
+            // Filter: hide explicitly irrelevant articles, keep explicitly relevant
+            // For unmarked: use threshold but lower it so more articles appear
+            all = all.filter(item => {
+                if (item.userFeedback === 'irrelevant') return false;
+                if (item.userFeedback === 'relevant') return true;
+                return item.relevance >= RELEVANCE_THRESHOLD;
+            });
 
             // Sort by relevance first, then by date
             all.sort((a, b) => {
@@ -859,24 +968,34 @@
                 return;
             }
 
-            feed.innerHTML = newsItems.map(item => {
-                const companyObj = state.companies.find(c => c.name === item.company);
-                const websiteHost = companyObj?.website ? new URL(companyObj.website.startsWith('http') ? companyObj.website : 'https://' + companyObj.website).hostname.replace('www.','') : '';
+            feed.innerHTML = newsItems.map((item, idx) => {
+                const key = articleKey(item);
+                const fb = feedback[key] || null;
+                const relevanceLabel = item.relevance >= 10 ? 'Hoog' : item.relevance >= 4 ? 'Medium' : 'Laag';
+                const relevanceAlpha = Math.min(Math.max(item.relevance, 0) / 30, 1) * 0.25;
 
                 return `
-                <a class="news-card" href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer">
+                <div class="news-card" data-index="${idx}">
                     <div class="news-card-header">
                         <span class="company-badge">
                             <span class="company-dot" style="background:${escapeHtml(item.color)}"></span>
                             ${escapeHtml(item.company)}
                         </span>
                         ${item.source ? `<span class="news-type">${escapeHtml(item.source)}</span>` : ''}
-                        <span class="news-type" style="background:rgba(52,211,153,${Math.min(item.relevance / 30, 1) * 0.25});color:var(--green)">${item.relevance >= 10 ? 'Hoog' : 'Medium'}</span>
+                        <span class="news-type" style="background:rgba(52,211,153,${relevanceAlpha});color:var(--green)">${relevanceLabel}</span>
                         <span class="news-date">${escapeHtml(item.dateStr)}</span>
                     </div>
-                    <div class="news-title">${escapeHtml(item.title)}</div>
-                    <span class="news-source">Lees artikel &#8594;</span>
-                </a>`;
+                    <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:inherit">
+                        <div class="news-title">${escapeHtml(item.title)}</div>
+                    </a>
+                    <div class="news-card-footer">
+                        <a class="news-source" href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer">Lees artikel &#8594;</a>
+                        <div class="feedback-buttons">
+                            <button class="feedback-btn irrelevant ${fb === 'irrelevant' ? 'active' : ''}" data-idx="${idx}" data-action="irrelevant" title="Niet relevant">&#10007;</button>
+                            <button class="feedback-btn relevant ${fb === 'relevant' ? 'active' : ''}" data-idx="${idx}" data-action="relevant" title="Wel relevant">&#10003;</button>
+                        </div>
+                    </div>
+                </div>`;
             }).join('');
         }
 
@@ -1019,6 +1138,46 @@
                 state.companies.splice(index, 1);
                 saveState();
                 renderCompanyList();
+            }
+        });
+
+        // Feedback buttons on news cards
+        document.getElementById('news-feed').addEventListener('click', (e) => {
+            const btn = e.target.closest('.feedback-btn');
+            if (!btn) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const idx = parseInt(btn.dataset.idx);
+            const action = btn.dataset.action;
+            const item = newsItems[idx];
+            if (!item) return;
+
+            const key = articleKey(item);
+            const currentFeedback = feedback[key];
+
+            // Toggle: clicking same button again removes feedback
+            if (currentFeedback === action) {
+                delete feedback[key];
+            } else {
+                feedback[key] = action;
+            }
+
+            saveFeedback();
+
+            // If marked irrelevant, remove from view with animation
+            if (feedback[key] === 'irrelevant') {
+                const card = btn.closest('.news-card');
+                card.style.transition = 'opacity 0.3s, transform 0.3s';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(20px)';
+                setTimeout(() => {
+                    newsItems.splice(idx, 1);
+                    renderFeed();
+                }, 300);
+            } else {
+                renderFeed();
             }
         });
 
