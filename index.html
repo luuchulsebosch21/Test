@@ -854,8 +854,8 @@
             return score;
         }
 
-        // Minimum relevance threshold to show an article (lowered to show more results)
-        const RELEVANCE_THRESHOLD = 0;
+        // Minimum relevance threshold — focus on quality over quantity
+        const RELEVANCE_THRESHOLD = 4;
 
         // Multiple CORS proxies for fallback
         const CORS_PROXIES = [
@@ -865,9 +865,11 @@
         ];
 
         const FEEDBACK_KEY = 'portfolio-dealflow-feedback';
+        const REJECTED_NAMES_KEY = 'portfolio-rejected-names';
 
         let state = loadState();
         let feedback = loadFeedback();  // { [articleKey]: 'relevant' | 'irrelevant' }
+        let rejectedNames = loadRejectedNames(); // Set of lowercase names user unchecked during import
         let newsItems = [];
         let isLoading = false;
 
@@ -880,6 +882,27 @@
 
         function saveFeedback() {
             localStorage.setItem(FEEDBACK_KEY, JSON.stringify(feedback));
+        }
+
+        function loadRejectedNames() {
+            try {
+                const saved = localStorage.getItem(REJECTED_NAMES_KEY);
+                return saved ? new Set(JSON.parse(saved)) : new Set();
+            } catch(e) { return new Set(); }
+        }
+
+        function saveRejectedNames() {
+            localStorage.setItem(REJECTED_NAMES_KEY, JSON.stringify([...rejectedNames]));
+        }
+
+        function isRejectedName(name) {
+            const lower = name.toLowerCase().trim();
+            if (rejectedNames.has(lower)) return true;
+            // Also check if any rejected name is a substring or vice versa (fuzzy)
+            for (const rejected of rejectedNames) {
+                if (lower === rejected) return true;
+            }
+            return false;
         }
 
         function articleKey(item) {
@@ -1180,11 +1203,22 @@
                 return b.date - a.date;
             });
 
-            // Show all relevant articles (no artificial cap)
+            // Cap per company: max 10 best articles each to keep quality high
+            const MAX_PER_COMPANY = 10;
+            const perCompanyCount = {};
+            all = all.filter(item => {
+                const key = item.company;
+                perCompanyCount[key] = (perCompanyCount[key] || 0) + 1;
+                return perCompanyCount[key] <= MAX_PER_COMPANY;
+            });
+
             newsItems = all;
 
             // Show status
-            statusBar.textContent = `${newsItems.length} artikel${newsItems.length !== 1 ? 'en' : ''} gevonden`;
+            const totalFetched = results.flat().length;
+            const qualityFiltered = totalFetched - newsItems.length;
+            statusBar.textContent = `${newsItems.length} relevant${newsItems.length !== 1 ? 'e' : ''} artikel${newsItems.length !== 1 ? 'en' : ''}` +
+                (qualityFiltered > 0 ? ` (${qualityFiltered} irrelevant gefilterd)` : '');
             statusBar.classList.add('visible');
 
             if (failedCompanies.length > 0) {
@@ -1685,6 +1719,7 @@
 
                 const key = candidateName.toLowerCase();
                 if (seen.has(key)) continue;
+                if (isRejectedName(candidateName)) continue; // Skip previously rejected names
                 seen.add(key);
 
                 // Try to find associated URL in the document
@@ -1765,6 +1800,7 @@
 
                 const key = candidateName.toLowerCase();
                 if (seen.has(key)) continue;
+                if (isRejectedName(candidateName)) continue; // Skip previously rejected names
                 seen.add(key);
 
                 let website = '';
@@ -1926,11 +1962,23 @@
         });
 
         document.getElementById('import-confirm').addEventListener('click', () => {
-            const checkboxes = document.querySelectorAll('.import-check:checked');
-            const websiteInputs = document.querySelectorAll('.import-item-edit');
+            const allCheckboxes = document.querySelectorAll('.import-check');
+            const checkedBoxes = document.querySelectorAll('.import-check:checked');
+            const checkedIdxs = new Set([...checkedBoxes].map(cb => parseInt(cb.dataset.idx)));
             let added = 0;
 
-            checkboxes.forEach(cb => {
+            // Learn from rejections: remember unchecked names for future imports
+            allCheckboxes.forEach(cb => {
+                const idx = parseInt(cb.dataset.idx);
+                const company = pendingImports[idx];
+                if (!company) return;
+                if (!cb.checked) {
+                    rejectedNames.add(company.name.toLowerCase().trim());
+                }
+            });
+            saveRejectedNames();
+
+            checkedBoxes.forEach(cb => {
                 const idx = parseInt(cb.dataset.idx);
                 const company = pendingImports[idx];
                 if (!company) return;
@@ -1946,6 +1994,9 @@
                 const exists = state.companies.some(c => c.name.toLowerCase() === company.name.toLowerCase());
                 if (exists) return;
 
+                // If this name was previously rejected but user now explicitly checked it, un-reject it
+                rejectedNames.delete(company.name.toLowerCase().trim());
+
                 state.companies.push({
                     name: company.name,
                     website: website || '',
@@ -1955,6 +2006,7 @@
                 added++;
             });
 
+            saveRejectedNames();
             saveState();
             renderCompanyList();
 
