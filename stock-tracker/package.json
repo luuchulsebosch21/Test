@@ -6,12 +6,16 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
-    "build": "cd client && npm run build",
-    "start": "cd server && npm start",
+    "build": "cd client && npm install && npm run build",
+    "start": "cd server && node --import tsx src/index.ts",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
-    "seed": "cd server && npm run seed"
+    "seed": "cd server && npm run seed",
+    "render:build": "cd server && npm install && cd ../client && npm install && npm run build"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

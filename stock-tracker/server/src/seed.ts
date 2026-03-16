@@ -16,7 +16,7 @@ const insertPortfolio = db.prepare(
 
 const portfolioItems = [
   ['MSFT', 'Microsoft Corporation', 'NASDAQ', 'USD'],
-  ['ASML', 'ASML Holding NV', 'AMS', 'EUR'],
+  ['ASML.AS', 'ASML Holding NV', 'AMS', 'EUR'],
   ['AAPL', 'Apple Inc.', 'NASDAQ', 'USD'],
   ['GOOGL', 'Alphabet Inc.', 'NASDAQ', 'USD'],
   ['NOVO-B.CO', 'Novo Nordisk A/S', 'CPH', 'DKK'],

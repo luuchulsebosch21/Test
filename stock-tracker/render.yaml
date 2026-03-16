@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: stock-portfolio-tracker
+    runtime: node
+    rootDir: stock-tracker
+    buildCommand: npm install && npm run render:build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
