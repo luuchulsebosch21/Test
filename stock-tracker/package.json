@@ -7,10 +7,10 @@
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
     "build": "cd client && npm install && npm run build",
-    "start": "cd server && npm install && node --import tsx src/index.ts",
+    "start": "cd server && node --import tsx src/index.ts",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
     "seed": "cd server && npm run seed",
-    "postinstall": "cd server && npm install && cd ../client && npm install && cd .. && npm run build"
+    "render:build": "cd server && npm install && cd ../client && npm install && npm run build"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
