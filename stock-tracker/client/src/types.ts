@@ -154,6 +154,12 @@ export const ALL_COLUMNS: ColumnDef[] = [
   { key: 'evToFcf', label: 'EV/FCF', category: 'Valuation', format: 'ratio', getValue: (q) => q.evToFcf },
   { key: 'priceToBook', label: 'P/B', category: 'Valuation', format: 'ratio', getValue: (q) => q.priceToBook },
   { key: 'targetMeanPrice', label: 'Analyst Target', category: 'Valuation', format: 'price', getValue: (q) => q.targetMeanPrice },
+  { key: 'potentieelRendement', label: 'Pot. Rendement', category: 'Valuation', format: 'percent', getValue: (q) => {
+    if (q.targetMeanPrice && q.currentPrice && q.currentPrice > 0) {
+      return ((q.targetMeanPrice - q.currentPrice) / q.currentPrice) * 100;
+    }
+    return null;
+  }},
   // Growth
   { key: 'revenueGrowth', label: 'Rev Growth', category: 'Growth', format: 'percent', getValue: (q) => q.revenueGrowth },
   { key: 'earningsGrowth', label: 'EPS Growth', category: 'Growth', format: 'percent', getValue: (q) => q.earningsGrowth },
