@@ -16,7 +16,7 @@ export interface FavoriteItem {
   name: string;
   exchange: string | null;
   currency: string | null;
-  alarm_price: number | null;
+  target_price: number | null;
   notes: string | null;
   tags: string[];
   created_at: string;

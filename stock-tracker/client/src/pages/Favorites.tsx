@@ -1,15 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Upload, Trash2, RefreshCw, Download, ArrowUpDown, Loader2, Clock, Edit2, X, Check, Bell, Tag } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, Upload, Trash2, RefreshCw, Download, ArrowUpDown, Loader2, Clock, Edit2, X, Check, Bell, BellRing, Tag } from 'lucide-react';
 import type { FavoriteItem, MarketQuote } from '../types';
 import { ALL_COLUMNS, DEFAULT_FAVORITES_COLUMNS, AVAILABLE_TAGS } from '../types';
 import { getFavorites, addFavorite, addFavoritesBatch, updateFavorite, deleteFavorite, getQuotes } from '../api';
-import { formatValue, formatPercent, getPercentColor, calcAlarmDiffPercent, exportToCsv } from '../utils';
+import { formatValue, formatPercent, getPercentColor, calcTargetDiffPercent, exportToCsv } from '../utils';
 import ColumnPicker from '../components/ColumnPicker';
 import AddStockModal from '../components/AddStockModal';
 import ImportModal from '../components/ImportModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 
-const ALARM_COLUMN = { key: 'alarmDiffPercent', label: 'vs Alarm Price' };
+const TARGET_COLUMN = { key: 'targetDiffPercent', label: 'vs Target' };
+
+// Track which tickers already triggered a notification (avoid spam)
+const notifiedTickers = new Set<string>();
+
+function sendTargetNotification(ticker: string, name: string, currentPrice: number, targetPrice: number) {
+  if (notifiedTickers.has(ticker)) return;
+  notifiedTickers.add(ticker);
+
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(`${ticker} onder target price!`, {
+      body: `${name} staat op ${currentPrice.toFixed(2)} — onder je target van ${targetPrice.toFixed(2)}`,
+      icon: '/favicon.ico',
+    });
+  }
+}
 
 export default function Favorites() {
   const [items, setItems] = useState<FavoriteItem[]>([]);
@@ -20,7 +35,7 @@ export default function Favorites() {
     const stored = localStorage.getItem('favoritesColumns');
     return stored ? JSON.parse(stored) : DEFAULT_FAVORITES_COLUMNS;
   });
-  const [sortKey, setSortKey] = useState<string>('alarmDiffPercent');
+  const [sortKey, setSortKey] = useState<string>('targetDiffPercent');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [filter, setFilter] = useState('');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -28,8 +43,37 @@ export default function Favorites() {
   const [showImport, setShowImport] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FavoriteItem | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<{alarm_price: string; notes: string; tags: string[]}>({ alarm_price: '', notes: '', tags: [] });
+  const [editForm, setEditForm] = useState<{target_price: string; notes: string; tags: string[]}>({ target_price: '', notes: '', tags: [] });
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') {
+        setNotificationsEnabled(true);
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((perm) => {
+          setNotificationsEnabled(perm === 'granted');
+        });
+      }
+    }
+  }, []);
+
+  // Check for target price alerts whenever quotes update
+  const checkAlerts = useCallback((currentItems: FavoriteItem[], currentQuotes: Record<string, MarketQuote>) => {
+    for (const item of currentItems) {
+      if (item.target_price === null || item.target_price === undefined) continue;
+      const q = currentQuotes[item.ticker];
+      if (!q?.currentPrice) continue;
+      if (q.currentPrice <= item.target_price) {
+        sendTargetNotification(item.ticker, q.name || item.name, q.currentPrice, item.target_price);
+      } else {
+        // Price recovered above target: reset so we can notify again if it drops
+        notifiedTickers.delete(item.ticker);
+      }
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -39,12 +83,13 @@ export default function Favorites() {
         const q = await getQuotes(data.map((d) => d.ticker));
         setQuotes(q);
         setLastUpdated(new Date().toLocaleTimeString());
+        checkAlerts(data, q);
       }
     } catch (err) {
       console.error('Failed to load favorites:', err);
     }
     setLoading(false);
-  }, []);
+  }, [checkAlerts]);
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { localStorage.setItem('favoritesColumns', JSON.stringify(columns)); }, [columns]);
@@ -56,14 +101,18 @@ export default function Favorites() {
         const q = await getQuotes(items.map((i) => i.ticker));
         setQuotes(q);
         setLastUpdated(new Date().toLocaleTimeString());
+        checkAlerts(items, q);
       } catch {}
     }
     setRefreshing(false);
   };
 
-  const handleAdd = async (item: { ticker: string; name: string; exchange?: string }) => {
+  const handleAdd = async (data: { ticker: string; targetPrice?: number }) => {
     try {
-      const added = await addFavorite(item);
+      const added = await addFavorite({
+        ticker: data.ticker,
+        target_price: data.targetPrice,
+      });
       setItems((prev) => [...prev, added]);
       const q = await getQuotes([added.ticker]);
       setQuotes((prev) => ({ ...prev, ...q }));
@@ -74,7 +123,8 @@ export default function Favorites() {
 
   const handleImport = async (importedItems: { ticker: string; name: string }[]) => {
     try {
-      await addFavoritesBatch(importedItems);
+      const tickers = importedItems.map(i => i.ticker);
+      await addFavoritesBatch(tickers);
       await loadData();
     } catch (err: any) {
       alert('Import failed: ' + err.message);
@@ -95,7 +145,7 @@ export default function Favorites() {
   const startEdit = (item: FavoriteItem) => {
     setEditingId(item.id);
     setEditForm({
-      alarm_price: item.alarm_price !== null ? String(item.alarm_price) : '',
+      target_price: item.target_price !== null ? String(item.target_price) : '',
       notes: item.notes || '',
       tags: item.tags || [],
     });
@@ -104,7 +154,7 @@ export default function Favorites() {
   const saveEdit = async (id: number) => {
     try {
       const updated = await updateFavorite(id, {
-        alarm_price: editForm.alarm_price ? Number(editForm.alarm_price) : null,
+        target_price: editForm.target_price ? Number(editForm.target_price) : null,
         notes: editForm.notes || null,
         tags: editForm.tags,
       });
@@ -124,7 +174,7 @@ export default function Favorites() {
 
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortDir(key === 'alarmDiffPercent' ? 'desc' : 'asc'); }
+    else { setSortKey(key); setSortDir(key === 'targetDiffPercent' ? 'desc' : 'asc'); }
   };
 
   const allTags = Array.from(new Set(items.flatMap((i) => i.tags || [])));
@@ -142,11 +192,11 @@ export default function Favorites() {
     const dir = sortDir === 'asc' ? 1 : -1;
     if (sortKey === 'name') return dir * a.name.localeCompare(b.name);
     if (sortKey === 'ticker') return dir * a.ticker.localeCompare(b.ticker);
-    if (sortKey === 'alarmDiffPercent') {
+    if (sortKey === 'targetDiffPercent') {
       const qa = quotes[a.ticker];
       const qb = quotes[b.ticker];
-      const va = calcAlarmDiffPercent(a.alarm_price, qa?.currentPrice ?? null);
-      const vb = calcAlarmDiffPercent(b.alarm_price, qb?.currentPrice ?? null);
+      const va = calcTargetDiffPercent(a.target_price, qa?.currentPrice ?? null);
+      const vb = calcTargetDiffPercent(b.target_price, qb?.currentPrice ?? null);
       if (va === null && vb === null) return 0;
       if (va === null) return 1;
       if (vb === null) return -1;
@@ -167,19 +217,19 @@ export default function Favorites() {
   });
 
   const handleExport = () => {
-    const headers = ['Name', 'Ticker', 'Alarm Price', 'Notes', 'Tags', ...columns.map((c) => {
-      if (c === 'alarmDiffPercent') return 'vs Alarm Price';
+    const headers = ['Name', 'Ticker', 'Target Price', 'Notes', 'Tags', ...columns.map((c) => {
+      if (c === 'targetDiffPercent') return 'vs Target';
       return ALL_COLUMNS.find((ac) => ac.key === c)?.label || c;
     })];
     const rows = sortedItems.map((item) => {
       const q = quotes[item.ticker];
       return [
         item.name, item.ticker,
-        item.alarm_price !== null ? String(item.alarm_price) : '',
+        item.target_price !== null ? String(item.target_price) : '',
         item.notes || '', (item.tags || []).join('; '),
         ...columns.map((c) => {
-          if (c === 'alarmDiffPercent') {
-            const v = calcAlarmDiffPercent(item.alarm_price, q?.currentPrice ?? null);
+          if (c === 'targetDiffPercent') {
+            const v = calcTargetDiffPercent(item.target_price, q?.currentPrice ?? null);
             return v !== null ? v.toFixed(2) + '%' : 'n/a';
           }
           const col = ALL_COLUMNS.find((ac) => ac.key === c);
@@ -193,9 +243,16 @@ export default function Favorites() {
   };
 
   const activeColumns = columns.map((key) => {
-    if (key === 'alarmDiffPercent') return null; // handled separately
+    if (key === 'targetDiffPercent') return null; // handled separately
     return ALL_COLUMNS.find((c) => c.key === key);
   });
+
+  // Count how many are at or below target
+  const alertCount = items.filter(item => {
+    if (item.target_price === null) return false;
+    const q = quotes[item.ticker];
+    return q?.currentPrice != null && q.currentPrice <= item.target_price;
+  }).length;
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
@@ -207,7 +264,15 @@ export default function Favorites() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold">Favorietenlijst</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{items.length} stocks watching</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            {items.length} stocks watching
+            {alertCount > 0 && (
+              <span className="ml-2 text-green-600 dark:text-green-400 font-semibold">
+                <BellRing className="w-3.5 h-3.5 inline mr-0.5" />
+                {alertCount} onder target!
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {lastUpdated && (
@@ -216,7 +281,7 @@ export default function Favorites() {
           <button onClick={handleRefresh} disabled={refreshing} className="btn-secondary flex items-center gap-1.5">
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
           </button>
-          <ColumnPicker selectedColumns={columns} onChange={setColumns} extraColumns={[ALARM_COLUMN]} />
+          <ColumnPicker selectedColumns={columns} onChange={setColumns} extraColumns={[TARGET_COLUMN]} />
           <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> CSV</button>
           <button onClick={() => setShowImport(true)} className="btn-secondary flex items-center gap-1.5"><Upload className="w-4 h-4" /> Import</button>
           <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-1.5"><Plus className="w-4 h-4" /> Add</button>
@@ -228,7 +293,7 @@ export default function Favorites() {
         <input
           type="text"
           className="input-field max-w-sm"
-          placeholder="Filter by name or ticker..."
+          placeholder="Filter op naam of ticker..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
@@ -256,10 +321,10 @@ export default function Favorites() {
       {sortedItems.length === 0 ? (
         <div className="card p-12 text-center">
           <p className="text-gray-500 dark:text-gray-400">
-            {items.length === 0 ? 'No favorites yet.' : 'No results match your filter.'}
+            {items.length === 0 ? 'Nog geen favorieten.' : 'Geen resultaten voor je filter.'}
           </p>
           {items.length === 0 && (
-            <button onClick={() => setShowAdd(true)} className="btn-primary mt-4"><Plus className="w-4 h-4 inline mr-1" /> Add First Favorite</button>
+            <button onClick={() => setShowAdd(true)} className="btn-primary mt-4"><Plus className="w-4 h-4 inline mr-1" /> Voeg eerste favoriet toe</button>
           )}
         </div>
       ) : (
@@ -274,10 +339,10 @@ export default function Favorites() {
                   <span className="flex items-center gap-1">Ticker {sortKey === 'ticker' && <ArrowUpDown className="w-3 h-3" />}</span>
                 </th>
                 <th className="table-header">Tags</th>
-                <th className="table-header text-right">Alarm</th>
-                {columns.includes('alarmDiffPercent') && (
-                  <th className="table-header text-right" onClick={() => handleSort('alarmDiffPercent')}>
-                    <span className="flex items-center justify-end gap-1">vs Alarm {sortKey === 'alarmDiffPercent' && <ArrowUpDown className="w-3 h-3" />}</span>
+                <th className="table-header text-right">Target</th>
+                {columns.includes('targetDiffPercent') && (
+                  <th className="table-header text-right" onClick={() => handleSort('targetDiffPercent')}>
+                    <span className="flex items-center justify-end gap-1">vs Target {sortKey === 'targetDiffPercent' && <ArrowUpDown className="w-3 h-3" />}</span>
                   </th>
                 )}
                 {activeColumns.map((col) => col && (
@@ -291,8 +356,8 @@ export default function Favorites() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {sortedItems.map((item) => {
                 const q = quotes[item.ticker];
-                const alarmDiff = calcAlarmDiffPercent(item.alarm_price, q?.currentPrice ?? null);
-                const isAlert = item.alarm_price !== null && q?.currentPrice !== null && q?.currentPrice !== undefined && q.currentPrice <= item.alarm_price;
+                const targetDiff = calcTargetDiffPercent(item.target_price, q?.currentPrice ?? null);
+                const isAlert = item.target_price !== null && q?.currentPrice !== null && q?.currentPrice !== undefined && q.currentPrice <= item.target_price;
                 const isEditing = editingId === item.id;
 
                 return (
@@ -318,25 +383,25 @@ export default function Favorites() {
                         <input
                           type="number"
                           className="input-field w-24 text-right text-xs"
-                          value={editForm.alarm_price}
-                          onChange={(e) => setEditForm((p) => ({ ...p, alarm_price: e.target.value }))}
+                          value={editForm.target_price}
+                          onChange={(e) => setEditForm((p) => ({ ...p, target_price: e.target.value }))}
                           step="0.01"
                         />
                       ) : (
-                        item.alarm_price !== null ? item.alarm_price.toFixed(2) : 'n/a'
+                        item.target_price !== null ? item.target_price.toFixed(2) : 'n/a'
                       )}
                     </td>
-                    {columns.includes('alarmDiffPercent') && (
+                    {columns.includes('targetDiffPercent') && (
                       <td className={`table-cell text-right font-mono text-xs font-semibold ${
                         isAlert
                           ? 'text-green-600 dark:text-green-400'
-                          : alarmDiff !== null && alarmDiff > 0
+                          : targetDiff !== null && targetDiff > 0
                             ? 'text-green-600 dark:text-green-400'
-                            : alarmDiff !== null
+                            : targetDiff !== null
                               ? 'text-red-600 dark:text-red-400'
                               : ''
                       }`}>
-                        {alarmDiff !== null ? formatPercent(alarmDiff) : 'n/a'}
+                        {targetDiff !== null ? formatPercent(targetDiff) : 'n/a'}
                       </td>
                     )}
                     {activeColumns.map((col) => {
@@ -376,15 +441,15 @@ export default function Favorites() {
       {/* Edit panel for tags/notes */}
       {editingId !== null && (
         <div className="card mt-3 p-4">
-          <h3 className="text-sm font-semibold mb-2">Edit Details</h3>
+          <h3 className="text-sm font-semibold mb-2">Details bewerken</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Notes</label>
+              <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Notities</label>
               <textarea
                 className="input-field h-20 resize-none"
                 value={editForm.notes}
                 onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))}
-                placeholder="Add notes..."
+                placeholder="Voeg notities toe..."
               />
             </div>
             <div>
@@ -407,19 +472,25 @@ export default function Favorites() {
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-3">
-            <button onClick={() => setEditingId(null)} className="btn-secondary">Cancel</button>
-            <button onClick={() => saveEdit(editingId)} className="btn-primary">Save</button>
+            <button onClick={() => setEditingId(null)} className="btn-secondary">Annuleren</button>
+            <button onClick={() => saveEdit(editingId)} className="btn-primary">Opslaan</button>
           </div>
         </div>
       )}
 
       {/* Modals */}
-      <AddStockModal open={showAdd} onClose={() => setShowAdd(false)} onAdd={handleAdd} title="Add to Favorites" />
-      <ImportModal open={showImport} onClose={() => setShowImport(false)} onConfirm={handleImport} title="Import to Favorites" />
+      <AddStockModal
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        onAdd={handleAdd}
+        title="Toevoegen aan Favorieten"
+        showTargetPrice
+      />
+      <ImportModal open={showImport} onClose={() => setShowImport(false)} onConfirm={handleImport} title="Import naar Favorieten" />
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Remove from Favorites"
-        message={`Remove ${deleteTarget?.name} (${deleteTarget?.ticker}) from your favorites?`}
+        title="Verwijderen uit Favorieten"
+        message={`${deleteTarget?.name} (${deleteTarget?.ticker}) verwijderen uit je favorieten?`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />

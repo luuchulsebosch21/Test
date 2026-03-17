@@ -14,22 +14,22 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-// Portfolio
+// Portfolio — only ticker required, server auto-enriches
 export const getPortfolio = () => fetchJson<PortfolioItem[]>('/portfolio');
-export const addPortfolioItem = (item: { ticker: string; name: string; exchange?: string; currency?: string }) =>
-  fetchJson<PortfolioItem>('/portfolio', { method: 'POST', body: JSON.stringify(item) });
-export const addPortfolioBatch = (items: { ticker: string; name: string; exchange?: string; currency?: string }[]) =>
-  fetchJson<PortfolioItem[]>('/portfolio/batch', { method: 'POST', body: JSON.stringify({ items }) });
+export const addPortfolioItem = (ticker: string) =>
+  fetchJson<PortfolioItem>('/portfolio', { method: 'POST', body: JSON.stringify({ ticker }) });
+export const addPortfolioBatch = (tickers: string[]) =>
+  fetchJson<PortfolioItem[]>('/portfolio/batch', { method: 'POST', body: JSON.stringify({ items: tickers.map(t => ({ ticker: t })) }) });
 export const deletePortfolioItem = (id: number) =>
   fetchJson<{ success: boolean }>(`/portfolio/${id}`, { method: 'DELETE' });
 
-// Favorites
+// Favorites — only ticker required + optional target_price
 export const getFavorites = () => fetchJson<FavoriteItem[]>('/favorites');
-export const addFavorite = (item: { ticker: string; name: string; exchange?: string; currency?: string; alarm_price?: number; notes?: string; tags?: string[] }) =>
-  fetchJson<FavoriteItem>('/favorites', { method: 'POST', body: JSON.stringify(item) });
-export const addFavoritesBatch = (items: any[]) =>
-  fetchJson<{ inserted: number }>('/favorites/batch', { method: 'POST', body: JSON.stringify({ items }) });
-export const updateFavorite = (id: number, data: { alarm_price?: number | null; notes?: string | null; tags?: string[] }) =>
+export const addFavorite = (data: { ticker: string; target_price?: number; notes?: string; tags?: string[] }) =>
+  fetchJson<FavoriteItem>('/favorites', { method: 'POST', body: JSON.stringify(data) });
+export const addFavoritesBatch = (tickers: string[]) =>
+  fetchJson<{ inserted: number }>('/favorites/batch', { method: 'POST', body: JSON.stringify({ items: tickers.map(t => ({ ticker: t })) }) });
+export const updateFavorite = (id: number, data: { target_price?: number | null; notes?: string | null; tags?: string[] }) =>
   fetchJson<FavoriteItem>(`/favorites/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteFavorite = (id: number) =>
   fetchJson<{ success: boolean }>(`/favorites/${id}`, { method: 'DELETE' });

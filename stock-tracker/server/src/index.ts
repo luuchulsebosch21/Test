@@ -23,6 +23,20 @@ app.use(express.static(clientDist));
 // Initialize database
 initDb();
 
+// Helper: enrich ticker with name/exchange/currency from Yahoo
+async function enrichTicker(ticker: string): Promise<{ name: string; exchange: string | null; currency: string | null }> {
+  try {
+    const quote = await marketDataProvider.getQuote(ticker.toUpperCase());
+    return {
+      name: quote.name || ticker,
+      exchange: quote.exchange || null,
+      currency: quote.currency || null,
+    };
+  } catch {
+    return { name: ticker, exchange: null, currency: null };
+  }
+}
+
 // ===== Portfolio Routes =====
 
 app.get('/api/portfolio', (_req, res) => {
@@ -31,20 +45,21 @@ app.get('/api/portfolio', (_req, res) => {
   res.json(items);
 });
 
-app.post('/api/portfolio', (req, res) => {
-  const { ticker, name, exchange, currency } = req.body;
-  if (!ticker || !name) {
-    return res.status(400).json({ error: 'Ticker and name are required' });
+app.post('/api/portfolio', async (req, res) => {
+  const { ticker } = req.body;
+  if (!ticker) {
+    return res.status(400).json({ error: 'Ticker is required' });
   }
   const db = getDb();
+  const info = await enrichTicker(ticker);
   const result = db.prepare(
     'INSERT INTO portfolio_items (ticker, name, exchange, currency) VALUES (?, ?, ?, ?)'
-  ).run(ticker.toUpperCase(), name, exchange || null, currency || null);
+  ).run(ticker.toUpperCase(), info.name, info.exchange, info.currency);
   const item = db.prepare('SELECT * FROM portfolio_items WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(item);
 });
 
-app.post('/api/portfolio/batch', (req, res) => {
+app.post('/api/portfolio/batch', async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items)) {
     return res.status(400).json({ error: 'Items array is required' });
@@ -53,18 +68,17 @@ app.post('/api/portfolio/batch', (req, res) => {
   const insert = db.prepare(
     'INSERT INTO portfolio_items (ticker, name, exchange, currency) VALUES (?, ?, ?, ?)'
   );
-  const insertMany = db.transaction((items: any[]) => {
-    const results = [];
-    for (const item of items) {
-      if (item.ticker && item.name) {
-        const result = insert.run(item.ticker.toUpperCase(), item.name, item.exchange || null, item.currency || null);
-        results.push(result.lastInsertRowid);
-      }
-    }
-    return results;
-  });
-  const ids = insertMany(items);
-  const inserted = db.prepare(`SELECT * FROM portfolio_items WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids);
+  const ids: any[] = [];
+  for (const item of items) {
+    const t = item.ticker || item;
+    if (!t) continue;
+    const info = item.name ? { name: item.name, exchange: item.exchange || null, currency: item.currency || null } : await enrichTicker(t);
+    const result = insert.run(t.toUpperCase(), info.name, info.exchange, info.currency);
+    ids.push(result.lastInsertRowid);
+  }
+  const inserted = ids.length > 0
+    ? db.prepare(`SELECT * FROM portfolio_items WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids)
+    : [];
   res.status(201).json(inserted);
 });
 
@@ -80,7 +94,6 @@ app.delete('/api/portfolio/:id', (req, res) => {
 app.get('/api/favorites', (_req, res) => {
   const db = getDb();
   const items = db.prepare('SELECT * FROM favorite_items ORDER BY name').all() as FavoriteItem[];
-  // Attach tags
   const tagStmt = db.prepare('SELECT tag FROM favorite_tags WHERE favorite_id = ?');
   const result = items.map((item) => ({
     ...item,
@@ -89,15 +102,16 @@ app.get('/api/favorites', (_req, res) => {
   res.json(result);
 });
 
-app.post('/api/favorites', (req, res) => {
-  const { ticker, name, exchange, currency, alarm_price, notes, tags } = req.body;
-  if (!ticker || !name) {
-    return res.status(400).json({ error: 'Ticker and name are required' });
+app.post('/api/favorites', async (req, res) => {
+  const { ticker, target_price, notes, tags } = req.body;
+  if (!ticker) {
+    return res.status(400).json({ error: 'Ticker is required' });
   }
   const db = getDb();
+  const info = await enrichTicker(ticker);
   const result = db.prepare(
-    'INSERT INTO favorite_items (ticker, name, exchange, currency, alarm_price, notes) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(ticker.toUpperCase(), name, exchange || null, currency || null, alarm_price ?? null, notes || null);
+    'INSERT INTO favorite_items (ticker, name, exchange, currency, target_price, notes) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(ticker.toUpperCase(), info.name, info.exchange, info.currency, target_price ?? null, notes || null);
 
   const id = result.lastInsertRowid;
   if (tags && Array.isArray(tags)) {
@@ -112,7 +126,7 @@ app.post('/api/favorites', (req, res) => {
   res.status(201).json({ ...item, tags: itemTags });
 });
 
-app.post('/api/favorites/batch', (req, res) => {
+app.post('/api/favorites/batch', async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items)) {
     return res.status(400).json({ error: 'Items array is required' });
@@ -122,34 +136,31 @@ app.post('/api/favorites/batch', (req, res) => {
     'INSERT INTO favorite_items (ticker, name, exchange, currency) VALUES (?, ?, ?, ?)'
   );
   const insertTag = db.prepare('INSERT INTO favorite_tags (favorite_id, tag) VALUES (?, ?)');
-  const insertMany = db.transaction((items: any[]) => {
-    const ids: any[] = [];
-    for (const item of items) {
-      if (item.ticker && item.name) {
-        const result = insert.run(item.ticker.toUpperCase(), item.name, item.exchange || null, item.currency || null);
-        ids.push(result.lastInsertRowid);
-        if (item.tags && Array.isArray(item.tags)) {
-          for (const tag of item.tags) {
-            if (tag) insertTag.run(result.lastInsertRowid, tag);
-          }
-        }
+  const ids: any[] = [];
+  for (const item of items) {
+    const t = item.ticker || item;
+    if (!t) continue;
+    const info = item.name ? { name: item.name, exchange: item.exchange || null, currency: item.currency || null } : await enrichTicker(t);
+    const result = insert.run(t.toUpperCase(), info.name, info.exchange, info.currency);
+    ids.push(result.lastInsertRowid);
+    if (item.tags && Array.isArray(item.tags)) {
+      for (const tag of item.tags) {
+        if (tag) insertTag.run(result.lastInsertRowid, tag);
       }
     }
-    return ids;
-  });
-  const ids = insertMany(items);
+  }
   res.status(201).json({ inserted: ids.length });
 });
 
 app.put('/api/favorites/:id', (req, res) => {
-  const { alarm_price, notes, tags } = req.body;
+  const { target_price, notes, tags } = req.body;
   const db = getDb();
   const existing = db.prepare('SELECT * FROM favorite_items WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
 
   db.prepare(
-    "UPDATE favorite_items SET alarm_price = ?, notes = ?, updated_at = datetime('now') WHERE id = ?"
-  ).run(alarm_price ?? null, notes ?? null, req.params.id);
+    "UPDATE favorite_items SET target_price = ?, notes = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(target_price ?? null, notes ?? null, req.params.id);
 
   if (tags !== undefined && Array.isArray(tags)) {
     db.prepare('DELETE FROM favorite_tags WHERE favorite_id = ?').run(req.params.id);
@@ -273,9 +284,6 @@ app.post('/api/import/extract', upload.single('file'), async (req, res) => {
     if (mime === 'application/pdf') {
       text = await extractTextFromPdf(req.file.buffer);
     } else if (mime.startsWith('image/')) {
-      // For images, return the raw text extraction hint
-      // In MVP, we'll do basic text from filename and suggest manual input
-      // Full OCR would require Tesseract.js which is heavy
       text = req.file.originalname.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
       return res.json({
         items: [],

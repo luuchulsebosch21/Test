@@ -62,9 +62,9 @@ export default function Portfolio() {
     setRefreshing(false);
   };
 
-  const handleAdd = async (item: { ticker: string; name: string; exchange?: string }) => {
+  const handleAdd = async (data: { ticker: string }) => {
     try {
-      const added = await addPortfolioItem(item);
+      const added = await addPortfolioItem(data.ticker);
       setItems((prev) => [...prev, added]);
       const q = await getQuotes([added.ticker]);
       setQuotes((prev) => ({ ...prev, ...q }));
@@ -75,7 +75,8 @@ export default function Portfolio() {
 
   const handleImport = async (importedItems: { ticker: string; name: string; exchange?: string }[]) => {
     try {
-      const added = await addPortfolioBatch(importedItems);
+      const tickers = importedItems.map(i => i.ticker);
+      const added = await addPortfolioBatch(tickers);
       setItems((prev) => [...prev, ...added]);
       const q = await getQuotes(added.map((a: PortfolioItem) => a.ticker));
       setQuotes((prev) => ({ ...prev, ...q }));
@@ -135,7 +136,6 @@ export default function Portfolio() {
     const dir = sortDir === 'asc' ? 1 : -1;
     if (sortKey === 'name') return dir * a.name.localeCompare(b.name);
     if (sortKey === 'ticker') return dir * a.ticker.localeCompare(b.ticker);
-    // Sort by metric
     const colDef = ALL_COLUMNS.find((c) => c.key === sortKey);
     if (colDef) {
       const qa = quotes[a.ticker];
@@ -210,13 +210,13 @@ export default function Portfolio() {
         <div className="card p-12 text-center">
           <p className="text-gray-500 dark:text-gray-400">
             {items.length === 0
-              ? 'No holdings yet. Add stocks to start monitoring your portfolio.'
-              : 'No results match your filter.'}
+              ? 'Nog geen holdings. Voeg stocks toe om je portefeuille te monitoren.'
+              : 'Geen resultaten voor je filter.'}
           </p>
           {items.length === 0 && (
             <button onClick={() => setShowAdd(true)} className="btn-primary mt-4">
               <Plus className="w-4 h-4 inline mr-1" />
-              Add Your First Stock
+              Voeg je eerste stock toe
             </button>
           )}
         </div>
@@ -281,12 +281,12 @@ export default function Portfolio() {
       )}
 
       {/* Modals */}
-      <AddStockModal open={showAdd} onClose={() => setShowAdd(false)} onAdd={handleAdd} title="Add to Portfolio" />
-      <ImportModal open={showImport} onClose={() => setShowImport(false)} onConfirm={handleImport} title="Import to Portfolio" />
+      <AddStockModal open={showAdd} onClose={() => setShowAdd(false)} onAdd={handleAdd} title="Toevoegen aan Portefeuille" />
+      <ImportModal open={showImport} onClose={() => setShowImport(false)} onConfirm={handleImport} title="Import naar Portefeuille" />
       <ConfirmDialog
         open={!!deleteItem}
-        title="Remove from Portfolio"
-        message={`Remove ${deleteItem?.name} (${deleteItem?.ticker}) from your portfolio?`}
+        title="Verwijderen uit Portefeuille"
+        message={`${deleteItem?.name} (${deleteItem?.ticker}) verwijderen uit je portefeuille?`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteItem(null)}
       />

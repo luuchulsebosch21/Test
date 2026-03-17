@@ -16,7 +16,7 @@ export interface FavoriteItem {
   name: string;
   exchange: string | null;
   currency: string | null;
-  alarm_price: number | null;
+  target_price: number | null;
   notes: string | null;
   tags: string[];
   created_at: string;
@@ -172,7 +172,7 @@ export const ALL_COLUMNS: ColumnDef[] = [
 ];
 
 export const DEFAULT_PORTFOLIO_COLUMNS = ['currentPrice', 'dayChangePercent', 'performance1Y', 'peRatio', 'evToEbitda', 'targetMeanPrice', 'marketCap'];
-export const DEFAULT_FAVORITES_COLUMNS = ['currentPrice', 'dayChangePercent', 'alarmDiffPercent', 'performance1Y', 'peRatio', 'evToEbitda', 'targetMeanPrice'];
+export const DEFAULT_FAVORITES_COLUMNS = ['currentPrice', 'dayChangePercent', 'targetDiffPercent', 'performance1Y', 'peRatio', 'evToEbitda', 'targetMeanPrice'];
 
 // Available tags for favorites
 export const AVAILABLE_TAGS = [

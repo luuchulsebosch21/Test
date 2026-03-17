@@ -59,10 +59,10 @@ export function getPercentColor(value: number | null): string {
 
 // ===== Calculation Utilities =====
 
-export function calcAlarmDiffPercent(alarmPrice: number | null, currentPrice: number | null): number | null {
-  if (alarmPrice === null || alarmPrice === undefined || alarmPrice === 0) return null;
+export function calcTargetDiffPercent(targetPrice: number | null, currentPrice: number | null): number | null {
+  if (targetPrice === null || targetPrice === undefined || targetPrice === 0) return null;
   if (currentPrice === null || currentPrice === undefined) return null;
-  return ((alarmPrice - currentPrice) / alarmPrice) * 100;
+  return ((targetPrice - currentPrice) / targetPrice) * 100;
 }
 
 export function calcTransactionReturn(

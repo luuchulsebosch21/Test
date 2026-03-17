@@ -34,7 +34,7 @@ export function initDb(): Database.Database {
       name TEXT NOT NULL,
       exchange TEXT,
       currency TEXT,
-      alarm_price REAL,
+      target_price REAL,
       notes TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
@@ -69,6 +69,16 @@ export function initDb(): Database.Database {
       value TEXT NOT NULL
     );
   `);
+
+  // Migrate alarm_price → target_price for existing databases
+  try {
+    const cols = db.pragma('table_info(favorite_items)') as any[];
+    const hasAlarmPrice = cols.some((c: any) => c.name === 'alarm_price');
+    const hasTargetPrice = cols.some((c: any) => c.name === 'target_price');
+    if (hasAlarmPrice && !hasTargetPrice) {
+      db.exec('ALTER TABLE favorite_items RENAME COLUMN alarm_price TO target_price');
+    }
+  } catch {}
 
   return db;
 }

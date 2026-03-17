@@ -29,7 +29,7 @@ for (const [ticker, name, exchange, currency] of portfolioItems) {
 
 // Seed favorite items
 const insertFavorite = db.prepare(
-  'INSERT INTO favorite_items (ticker, name, exchange, currency, alarm_price, notes) VALUES (?, ?, ?, ?, ?, ?)'
+  'INSERT INTO favorite_items (ticker, name, exchange, currency, target_price, notes) VALUES (?, ?, ?, ?, ?, ?)'
 );
 const insertTag = db.prepare(
   'INSERT INTO favorite_tags (favorite_id, tag) VALUES (?, ?)'
@@ -79,7 +79,7 @@ const defaultPrefs = {
   darkMode: false,
   benchmarkTicker: 'SPY',
   portfolioColumns: JSON.stringify(['currentPrice', 'dayChangePercent', 'performance1Y', 'peRatio', 'evToEbitda', 'targetMeanPrice', 'marketCap']),
-  favoritesColumns: JSON.stringify(['currentPrice', 'dayChangePercent', 'alarmDiffPercent', 'performance1Y', 'peRatio', 'evToEbitda', 'targetMeanPrice']),
+  favoritesColumns: JSON.stringify(['currentPrice', 'dayChangePercent', 'targetDiffPercent', 'performance1Y', 'peRatio', 'evToEbitda', 'targetMeanPrice']),
 };
 
 for (const [key, value] of Object.entries(defaultPrefs)) {
