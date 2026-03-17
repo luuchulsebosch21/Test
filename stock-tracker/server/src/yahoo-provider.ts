@@ -16,10 +16,34 @@ function safeNum(val: unknown): number | null {
   return isFinite(n) ? n : null;
 }
 
-// Fetch full data: quote + quoteSummary with financialData, defaultKeyStatistics, earningsTrend
-async function fetchFullQuote(ticker: string): Promise<{ quote: any; summary: any }> {
+// Fetch historical price for a given date (used for 3Y/5Y returns)
+async function fetchHistoricalClose(ticker: string, yearsAgo: number): Promise<number | null> {
   try {
-    const [quote, summary] = await Promise.all([
+    const targetDate = new Date();
+    targetDate.setFullYear(targetDate.getFullYear() - yearsAgo);
+    const startDate = new Date(targetDate);
+    startDate.setDate(startDate.getDate() - 7); // 7 day window in case of weekends/holidays
+    const endDate = new Date(targetDate);
+    endDate.setDate(endDate.getDate() + 7);
+
+    const result = await yahooFinance.historical(ticker, {
+      period1: startDate.toISOString().split('T')[0],
+      period2: endDate.toISOString().split('T')[0],
+    });
+    if (result && result.length > 0) {
+      // Pick the closest date
+      return result[result.length - 1].close ?? result[0].close ?? null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Fetch full data: quote + quoteSummary with financialData, defaultKeyStatistics, earningsTrend
+async function fetchFullQuote(ticker: string): Promise<{ quote: any; summary: any; hist3Y: number | null; hist5Y: number | null }> {
+  try {
+    const [quote, summary, hist3Y, hist5Y] = await Promise.all([
       yahooFinance.quote(ticker).catch((e: any) => {
         console.warn(`quote() failed for ${ticker}:`, e.message);
         return null;
@@ -30,15 +54,17 @@ async function fetchFullQuote(ticker: string): Promise<{ quote: any; summary: an
         console.warn(`quoteSummary() failed for ${ticker}:`, e.message);
         return null;
       }),
+      fetchHistoricalClose(ticker, 3),
+      fetchHistoricalClose(ticker, 5),
     ]);
-    return { quote, summary };
+    return { quote, summary, hist3Y, hist5Y };
   } catch (error: any) {
     console.error(`fetchFullQuote failed for ${ticker}:`, error.message);
-    return { quote: null, summary: null };
+    return { quote: null, summary: null, hist3Y: null, hist5Y: null };
   }
 }
 
-function buildMarketQuote(ticker: string, q: any, summary: any): MarketQuote {
+function buildMarketQuote(ticker: string, q: any, summary: any, hist3Y: number | null = null, hist5Y: number | null = null): MarketQuote {
   if (!q) return createEmptyQuote(ticker);
 
   const currentPrice = safeNum(q.regularMarketPrice);
@@ -114,12 +140,38 @@ function buildMarketQuote(ticker: string, q: any, summary: any): MarketQuote {
   const netDebtToEbitda = (totalDebt !== null && totalCash !== null && ebitda && ebitda > 0)
     ? (totalDebt - totalCash) / ebitda : null;
 
+  // 3Y/5Y performance from historical data
+  let performance3Y: number | null = null;
+  if (currentPrice && hist3Y && hist3Y > 0) {
+    performance3Y = ((currentPrice - hist3Y) / hist3Y) * 100;
+  }
+  let performance5Y: number | null = null;
+  if (currentPrice && hist5Y && hist5Y > 0) {
+    performance5Y = ((currentPrice - hist5Y) / hist5Y) * 100;
+  }
+
   // EPS estimates from earningsTrend
   let epsEstimateY1: number | null = safeNum(q.epsForward);
   let epsEstimateY2: number | null = null;
+  let earningsGrowthEstY0: number | null = null;
+  let earningsGrowthEstY1: number | null = null;
+  let revenueGrowthEstY0: number | null = null;
+  let revenueGrowthEstY1: number | null = null;
   for (const trend of earningsTrend) {
-    if (trend.period === '0y') epsEstimateY1 = safeNum(trend.earningsEstimate?.avg) || epsEstimateY1;
-    if (trend.period === '+1y') epsEstimateY2 = safeNum(trend.earningsEstimate?.avg);
+    if (trend.period === '0y') {
+      epsEstimateY1 = safeNum(trend.earningsEstimate?.avg) || epsEstimateY1;
+      const g = safeNum(trend.growth);
+      earningsGrowthEstY0 = g !== null ? g * 100 : null;
+      const rg = safeNum(trend.revenueEstimate?.growth);
+      revenueGrowthEstY0 = rg !== null ? rg * 100 : null;
+    }
+    if (trend.period === '+1y') {
+      epsEstimateY2 = safeNum(trend.earningsEstimate?.avg);
+      const g = safeNum(trend.growth);
+      earningsGrowthEstY1 = g !== null ? g * 100 : null;
+      const rg = safeNum(trend.revenueEstimate?.growth);
+      revenueGrowthEstY1 = rg !== null ? rg * 100 : null;
+    }
   }
 
   // Dividend yield
@@ -157,7 +209,12 @@ function buildMarketQuote(ticker: string, q: any, summary: any): MarketQuote {
     revenueGrowth,
     targetMeanPrice,
     performance1Y: safeNum(q.fiftyTwoWeekChangePercent),
-    performance3Y: null,
+    performance3Y,
+    performance5Y,
+    earningsGrowthEstY0,
+    earningsGrowthEstY1,
+    revenueGrowthEstY0,
+    revenueGrowthEstY1,
     revenueEstimateY1: null,
     revenueEstimateY2: null,
     revenueEstimateY3: null,
@@ -181,12 +238,12 @@ export class YahooFinanceProvider implements MarketDataProvider {
       return cached.data;
     }
 
-    const { quote: q, summary } = await fetchFullQuote(ticker);
+    const { quote: q, summary, hist3Y, hist5Y } = await fetchFullQuote(ticker);
     if (!q || !q.symbol) {
       return createEmptyQuote(ticker);
     }
 
-    const result = buildMarketQuote(ticker, q, summary);
+    const result = buildMarketQuote(ticker, q, summary, hist3Y, hist5Y);
     quoteCache.set(ticker, { data: result, timestamp: Date.now() });
     return result;
   }
@@ -282,6 +339,11 @@ function createEmptyQuote(ticker: string): MarketQuote {
     targetMeanPrice: null,
     performance1Y: null,
     performance3Y: null,
+    performance5Y: null,
+    earningsGrowthEstY0: null,
+    earningsGrowthEstY1: null,
+    revenueGrowthEstY0: null,
+    revenueGrowthEstY1: null,
     revenueEstimateY1: null,
     revenueEstimateY2: null,
     revenueEstimateY3: null,

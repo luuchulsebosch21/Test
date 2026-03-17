@@ -9,7 +9,7 @@ import AddStockModal from '../components/AddStockModal';
 import ImportModal from '../components/ImportModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 
-const TARGET_COLUMN = { key: 'targetDiffPercent', label: 'vs Target' };
+const TARGET_COLUMN = { key: 'targetDiffPercent', label: 'vs Alarm' };
 
 // Track which tickers already triggered a notification (avoid spam)
 const notifiedTickers = new Set<string>();
@@ -19,8 +19,8 @@ function sendTargetNotification(ticker: string, name: string, currentPrice: numb
   notifiedTickers.add(ticker);
 
   if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(`${ticker} onder target price!`, {
-      body: `${name} staat op ${currentPrice.toFixed(2)} — onder je target van ${targetPrice.toFixed(2)}`,
+    new Notification(`${ticker} onder alarm price!`, {
+      body: `${name} staat op ${currentPrice.toFixed(2)} — onder je alarm price van ${targetPrice.toFixed(2)}`,
       icon: '/favicon.ico',
     });
   }
@@ -217,8 +217,8 @@ export default function Favorites() {
   });
 
   const handleExport = () => {
-    const headers = ['Name', 'Ticker', 'Target Price', 'Notes', 'Tags', ...columns.map((c) => {
-      if (c === 'targetDiffPercent') return 'vs Target';
+    const headers = ['Name', 'Ticker', 'Alarm Price', 'Notes', 'Tags', ...columns.map((c) => {
+      if (c === 'targetDiffPercent') return 'vs Alarm';
       return ALL_COLUMNS.find((ac) => ac.key === c)?.label || c;
     })];
     const rows = sortedItems.map((item) => {
@@ -269,7 +269,7 @@ export default function Favorites() {
             {alertCount > 0 && (
               <span className="ml-2 text-green-600 dark:text-green-400 font-semibold">
                 <BellRing className="w-3.5 h-3.5 inline mr-0.5" />
-                {alertCount} onder target!
+                {alertCount} onder alarm price!
               </span>
             )}
           </p>
@@ -329,7 +329,7 @@ export default function Favorites() {
         </div>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-max">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="table-header" onClick={() => handleSort('name')}>
@@ -339,10 +339,10 @@ export default function Favorites() {
                   <span className="flex items-center gap-1">Ticker {sortKey === 'ticker' && <ArrowUpDown className="w-3 h-3" />}</span>
                 </th>
                 <th className="table-header">Tags</th>
-                <th className="table-header text-right">Target</th>
+                <th className="table-header text-right">Alarm Price</th>
                 {columns.includes('targetDiffPercent') && (
                   <th className="table-header text-right" onClick={() => handleSort('targetDiffPercent')}>
-                    <span className="flex items-center justify-end gap-1">vs Target {sortKey === 'targetDiffPercent' && <ArrowUpDown className="w-3 h-3" />}</span>
+                    <span className="flex items-center justify-end gap-1">vs Alarm {sortKey === 'targetDiffPercent' && <ArrowUpDown className="w-3 h-3" />}</span>
                   </th>
                 )}
                 {activeColumns.map((col) => col && (
@@ -393,13 +393,11 @@ export default function Favorites() {
                     </td>
                     {columns.includes('targetDiffPercent') && (
                       <td className={`table-cell text-right font-mono text-xs font-semibold ${
-                        isAlert
+                        targetDiff !== null && targetDiff <= 0
                           ? 'text-green-600 dark:text-green-400'
-                          : targetDiff !== null && targetDiff > 0
-                            ? 'text-green-600 dark:text-green-400'
-                            : targetDiff !== null
-                              ? 'text-red-600 dark:text-red-400'
-                              : ''
+                          : targetDiff !== null
+                            ? 'text-red-600 dark:text-red-400'
+                            : ''
                       }`}>
                         {targetDiff !== null ? formatPercent(targetDiff) : 'n/a'}
                       </td>

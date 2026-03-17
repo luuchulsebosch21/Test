@@ -72,6 +72,11 @@ export interface MarketQuote {
   targetMeanPrice: number | null;
   performance1Y: number | null;
   performance3Y: number | null;
+  performance5Y: number | null;
+  earningsGrowthEstY0: number | null;
+  earningsGrowthEstY1: number | null;
+  revenueGrowthEstY0: number | null;
+  revenueGrowthEstY1: number | null;
   revenueEstimateY1: number | null;
   revenueEstimateY2: number | null;
   revenueEstimateY3: number | null;
@@ -125,7 +130,7 @@ export const COLUMN_TEMPLATES: Record<string, { label: string; columns: string[]
   },
   growth: {
     label: 'Growth View',
-    columns: ['currentPrice', 'dayChangePercent', 'performance1Y', 'performance3Y', 'revenueGrowth', 'earningsGrowth', 'revenueEstimateY1', 'epsEstimateY1'],
+    columns: ['currentPrice', 'dayChangePercent', 'performance1Y', 'performance3Y', 'performance5Y', 'earningsGrowthEstY0', 'earningsGrowthEstY1', 'revenueGrowth', 'earningsGrowth'],
   },
   quality: {
     label: 'Quality View',
@@ -140,6 +145,7 @@ export const ALL_COLUMNS: ColumnDef[] = [
   { key: 'dayChangePercent', label: 'Day %', category: 'Price', format: 'percent', getValue: (q) => q.dayChangePercent },
   { key: 'performance1Y', label: '1Y %', category: 'Performance', format: 'percent', getValue: (q) => q.performance1Y },
   { key: 'performance3Y', label: '3Y %', category: 'Performance', format: 'percent', getValue: (q) => q.performance3Y },
+  { key: 'performance5Y', label: '5Y %', category: 'Performance', format: 'percent', getValue: (q) => q.performance5Y },
   // Valuation
   { key: 'peRatio', label: 'P/E', category: 'Valuation', format: 'ratio', getValue: (q) => q.peRatio },
   { key: 'forwardPE', label: 'Fwd P/E', category: 'Valuation', format: 'ratio', getValue: (q) => q.forwardPE },
@@ -147,10 +153,20 @@ export const ALL_COLUMNS: ColumnDef[] = [
   { key: 'evToEbit', label: 'EV/EBIT', category: 'Valuation', format: 'ratio', getValue: (q) => q.evToEbit },
   { key: 'evToFcf', label: 'EV/FCF', category: 'Valuation', format: 'ratio', getValue: (q) => q.evToFcf },
   { key: 'priceToBook', label: 'P/B', category: 'Valuation', format: 'ratio', getValue: (q) => q.priceToBook },
-  { key: 'targetMeanPrice', label: 'Target Price', category: 'Valuation', format: 'price', getValue: (q) => q.targetMeanPrice },
+  { key: 'targetMeanPrice', label: 'Analyst Target', category: 'Valuation', format: 'price', getValue: (q) => q.targetMeanPrice },
+  { key: 'potentieelRendement', label: 'Pot. Rendement', category: 'Valuation', format: 'percent', getValue: (q) => {
+    if (q.targetMeanPrice && q.currentPrice && q.currentPrice > 0) {
+      return ((q.targetMeanPrice - q.currentPrice) / q.currentPrice) * 100;
+    }
+    return null;
+  }},
   // Growth
   { key: 'revenueGrowth', label: 'Rev Growth', category: 'Growth', format: 'percent', getValue: (q) => q.revenueGrowth },
   { key: 'earningsGrowth', label: 'EPS Growth', category: 'Growth', format: 'percent', getValue: (q) => q.earningsGrowth },
+  { key: 'earningsGrowthEstY0', label: 'EPS Gr Est CY', category: 'Growth', format: 'percent', getValue: (q) => q.earningsGrowthEstY0 },
+  { key: 'earningsGrowthEstY1', label: 'EPS Gr Est NY', category: 'Growth', format: 'percent', getValue: (q) => q.earningsGrowthEstY1 },
+  { key: 'revenueGrowthEstY0', label: 'Rev Gr Est CY', category: 'Growth', format: 'percent', getValue: (q) => q.revenueGrowthEstY0 },
+  { key: 'revenueGrowthEstY1', label: 'Rev Gr Est NY', category: 'Growth', format: 'percent', getValue: (q) => q.revenueGrowthEstY1 },
   { key: 'revenueEstimateY1', label: 'Rev Est Y1', category: 'Growth', format: 'number', getValue: (q) => q.revenueEstimateY1 },
   { key: 'revenueEstimateY2', label: 'Rev Est Y2', category: 'Growth', format: 'number', getValue: (q) => q.revenueEstimateY2 },
   { key: 'revenueEstimateY3', label: 'Rev Est Y3', category: 'Growth', format: 'number', getValue: (q) => q.revenueEstimateY3 },
