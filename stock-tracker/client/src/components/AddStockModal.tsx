@@ -163,11 +163,11 @@ export default function AddStockModal({ open, onClose, onAdd, title = 'Add Stock
 
               {showTargetPrice && (
                 <div className="mb-4">
-                  <label className="text-sm text-gray-600 dark:text-gray-400 block mb-1">Target Price (optioneel)</label>
+                  <label className="text-sm text-gray-600 dark:text-gray-400 block mb-1">Alarm Price (optioneel)</label>
                   <input
                     type="number"
                     className="input-field w-full"
-                    placeholder="Voer je target price in..."
+                    placeholder="Voer je alarm price in..."
                     value={targetPrice}
                     onChange={(e) => setTargetPrice(e.target.value)}
                     step="0.01"

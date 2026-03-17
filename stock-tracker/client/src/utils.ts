@@ -62,7 +62,8 @@ export function getPercentColor(value: number | null): string {
 export function calcTargetDiffPercent(targetPrice: number | null, currentPrice: number | null): number | null {
   if (targetPrice === null || targetPrice === undefined || targetPrice === 0) return null;
   if (currentPrice === null || currentPrice === undefined) return null;
-  return ((targetPrice - currentPrice) / targetPrice) * 100;
+  // Positive = current price is above alarm price, negative = below
+  return ((currentPrice - targetPrice) / targetPrice) * 100;
 }
 
 export function calcTransactionReturn(

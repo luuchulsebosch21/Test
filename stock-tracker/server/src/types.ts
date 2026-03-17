@@ -72,9 +72,15 @@ export interface MarketQuote {
   earningsGrowth: number | null;
   revenueGrowth: number | null;
   targetMeanPrice: number | null;
-  // 1Y/3Y performance
+  // 1Y/3Y/5Y performance
   performance1Y: number | null;
   performance3Y: number | null;
+  performance5Y: number | null;
+  // Growth estimates
+  earningsGrowthEstY0: number | null;
+  earningsGrowthEstY1: number | null;
+  revenueGrowthEstY0: number | null;
+  revenueGrowthEstY1: number | null;
   // Forward estimates (often unavailable)
   revenueEstimateY1: number | null;
   revenueEstimateY2: number | null;
