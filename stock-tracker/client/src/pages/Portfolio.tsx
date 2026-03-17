@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Upload, Trash2, RefreshCw, Download, ArrowUpDown, Loader2, Clock } from 'lucide-react';
+import { Plus, Upload, Trash2, RefreshCw, Download, ArrowUpDown, Loader2, Clock, AlertTriangle } from 'lucide-react';
 import type { PortfolioItem, MarketQuote } from '../types';
 import { ALL_COLUMNS, DEFAULT_PORTFOLIO_COLUMNS } from '../types';
 import { getPortfolio, addPortfolioItem, addPortfolioBatch, deletePortfolioItem, getQuotes } from '../api';
@@ -25,8 +25,10 @@ export default function Portfolio() {
   const [showImport, setShowImport] = useState(false);
   const [deleteItem, setDeleteItem] = useState<PortfolioItem | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
+    setError(null);
     try {
       const data = await getPortfolio();
       setItems(data);
@@ -38,6 +40,7 @@ export default function Portfolio() {
       }
     } catch (err) {
       console.error('Failed to load portfolio:', err);
+      setError('Kan geen verbinding maken met de server. Controleer of de backend draait.');
     }
     setLoading(false);
   }, []);
@@ -162,6 +165,18 @@ export default function Portfolio() {
 
   return (
     <div>
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-red-800 dark:text-red-200 font-medium">{error}</p>
+            <p className="text-red-600 dark:text-red-400 text-sm mt-1">Je eerder toegevoegde data staat veilig opgeslagen en verschijnt weer zodra de server bereikbaar is.</p>
+          </div>
+          <button onClick={loadData} className="btn-secondary text-sm flex items-center gap-1.5">
+            <RefreshCw className="w-4 h-4" /> Opnieuw proberen
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
