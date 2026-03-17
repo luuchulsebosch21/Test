@@ -73,7 +73,11 @@ export default function ColumnPicker({ selectedColumns, onChange, extraColumns }
             <div className="mb-2">
               <div className="text-xs font-semibold text-gray-400 uppercase mb-1">Special</div>
               {extraColumns.map((col) => (
-                <label key={col.key} className="flex items-center gap-2 py-0.5 cursor-pointer text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 px-1 rounded">
+                <div
+                  key={col.key}
+                  onClick={() => toggleColumn(col.key)}
+                  className="flex items-center gap-2 py-0.5 cursor-pointer text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 px-1 rounded"
+                >
                   <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
                     selectedColumns.includes(col.key)
                       ? 'bg-blue-600 border-blue-600'
@@ -82,7 +86,7 @@ export default function ColumnPicker({ selectedColumns, onChange, extraColumns }
                     {selectedColumns.includes(col.key) && <Check className="w-3 h-3 text-white" />}
                   </div>
                   {col.label}
-                </label>
+                </div>
               ))}
             </div>
           )}
@@ -92,7 +96,11 @@ export default function ColumnPicker({ selectedColumns, onChange, extraColumns }
             <div key={category} className="mb-2">
               <div className="text-xs font-semibold text-gray-400 uppercase mb-1">{category}</div>
               {cols.map((col) => (
-                <label key={col.key} className="flex items-center gap-2 py-0.5 cursor-pointer text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 px-1 rounded">
+                <div
+                  key={col.key}
+                  onClick={() => toggleColumn(col.key)}
+                  className="flex items-center gap-2 py-0.5 cursor-pointer text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 px-1 rounded"
+                >
                   <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
                     selectedColumns.includes(col.key)
                       ? 'bg-blue-600 border-blue-600'
@@ -101,7 +109,7 @@ export default function ColumnPicker({ selectedColumns, onChange, extraColumns }
                     {selectedColumns.includes(col.key) && <Check className="w-3 h-3 text-white" />}
                   </div>
                   {col.label}
-                </label>
+                </div>
               ))}
             </div>
           ))}

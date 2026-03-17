@@ -222,7 +222,7 @@ export default function Portfolio() {
         </div>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-max">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="table-header" onClick={() => handleSort('name')}>
