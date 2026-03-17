@@ -6,24 +6,27 @@ import type { SearchResult } from '../types';
 interface Props {
   open: boolean;
   onClose: () => void;
-  onAdd: (item: { ticker: string; name: string; exchange?: string }) => void;
+  onAdd: (data: { ticker: string; targetPrice?: number }) => void;
   title?: string;
+  showTargetPrice?: boolean;
 }
 
-export default function AddStockModal({ open, onClose, onAdd, title = 'Add Stock' }: Props) {
+export default function AddStockModal({ open, onClose, onAdd, title = 'Add Stock', showTargetPrice = false }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [manualTicker, setManualTicker] = useState('');
-  const [manualName, setManualName] = useState('');
+  const [selectedTicker, setSelectedTicker] = useState('');
+  const [selectedName, setSelectedName] = useState('');
+  const [targetPrice, setTargetPrice] = useState('');
   const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!open) {
       setQuery('');
       setResults([]);
-      setManualTicker('');
-      setManualName('');
+      setSelectedTicker('');
+      setSelectedName('');
+      setTargetPrice('');
     }
   }, [open]);
 
@@ -49,13 +52,38 @@ export default function AddStockModal({ open, onClose, onAdd, title = 'Add Stock
   };
 
   const handleSelect = (result: SearchResult) => {
-    onAdd({ ticker: result.ticker, name: result.name, exchange: result.exchange });
+    if (showTargetPrice) {
+      // For favorites: select ticker first, let user set target price before confirming
+      setSelectedTicker(result.ticker);
+      setSelectedName(result.name);
+      setResults([]);
+      setQuery('');
+    } else {
+      // For portfolio: add immediately
+      onAdd({ ticker: result.ticker });
+      onClose();
+    }
+  };
+
+  const handleConfirmAdd = () => {
+    if (!selectedTicker) return;
+    onAdd({
+      ticker: selectedTicker,
+      targetPrice: targetPrice ? Number(targetPrice) : undefined,
+    });
     onClose();
   };
 
-  const handleManualAdd = () => {
-    if (manualTicker.trim() && manualName.trim()) {
-      onAdd({ ticker: manualTicker.trim().toUpperCase(), name: manualName.trim() });
+  const handleTickerSubmit = () => {
+    const ticker = query.trim().toUpperCase();
+    if (!ticker) return;
+    if (showTargetPrice) {
+      setSelectedTicker(ticker);
+      setSelectedName(ticker);
+      setResults([]);
+      setQuery('');
+    } else {
+      onAdd({ ticker });
       onClose();
     }
   };
@@ -71,68 +99,89 @@ export default function AddStockModal({ open, onClose, onAdd, title = 'Add Stock
         </div>
 
         <div className="p-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              className="input-field pl-9"
-              placeholder="Search by company name or ticker..."
-              value={query}
-              onChange={(e) => handleSearch(e.target.value)}
-              autoFocus
-            />
-            {loading && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 text-gray-400 animate-spin" />}
-          </div>
+          {!selectedTicker ? (
+            <>
+              {/* Search / ticker input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  className="input-field pl-9"
+                  placeholder="Zoek op naam of voer ticker in..."
+                  value={query}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && results.length === 0 && query.trim()) {
+                      handleTickerSubmit();
+                    }
+                  }}
+                  autoFocus
+                />
+                {loading && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 text-gray-400 animate-spin" />}
+              </div>
 
-          {/* Results */}
-          {results.length > 0 && (
-            <div className="mt-3 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
-              {results.map((r) => (
-                <button
-                  key={r.ticker}
-                  onClick={() => handleSelect(r)}
-                  className="w-full text-left px-3 py-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-medium text-sm">{r.ticker}</span>
-                      <span className="text-gray-500 dark:text-gray-400 text-sm ml-2">{r.name}</span>
-                    </div>
-                    <span className="text-xs text-gray-400">{r.exchange}</span>
+              <p className="text-xs text-gray-400 mt-1.5">Typ een ticker (bijv. MSFT) en druk Enter, of zoek op bedrijfsnaam</p>
+
+              {/* Results */}
+              {results.length > 0 && (
+                <div className="mt-3 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+                  {results.map((r) => (
+                    <button
+                      key={r.ticker}
+                      onClick={() => handleSelect(r)}
+                      className="w-full text-left px-3 py-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-medium text-sm">{r.ticker}</span>
+                          <span className="text-gray-500 dark:text-gray-400 text-sm ml-2">{r.name}</span>
+                        </div>
+                        <span className="text-xs text-gray-400">{r.exchange}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Selected ticker + target price */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-blue-700 dark:text-blue-400">{selectedTicker}</span>
+                    <span className="text-gray-600 dark:text-gray-300 text-sm ml-2">{selectedName}</span>
                   </div>
-                </button>
-              ))}
-            </div>
-          )}
+                  <button
+                    onClick={() => { setSelectedTicker(''); setSelectedName(''); }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
 
-          {/* Manual entry */}
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Or add manually:</p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                className="input-field w-28"
-                placeholder="Ticker"
-                value={manualTicker}
-                onChange={(e) => setManualTicker(e.target.value.toUpperCase())}
-              />
-              <input
-                type="text"
-                className="input-field flex-1"
-                placeholder="Company name"
-                value={manualName}
-                onChange={(e) => setManualName(e.target.value)}
-              />
-              <button
-                onClick={handleManualAdd}
-                disabled={!manualTicker.trim() || !manualName.trim()}
-                className="btn-primary whitespace-nowrap"
-              >
-                Add
+              {showTargetPrice && (
+                <div className="mb-4">
+                  <label className="text-sm text-gray-600 dark:text-gray-400 block mb-1">Target Price (optioneel)</label>
+                  <input
+                    type="number"
+                    className="input-field w-full"
+                    placeholder="Voer je target price in..."
+                    value={targetPrice}
+                    onChange={(e) => setTargetPrice(e.target.value)}
+                    step="0.01"
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Je krijgt een melding als de koers onder deze prijs komt</p>
+                </div>
+              )}
+
+              <button onClick={handleConfirmAdd} className="btn-primary w-full">
+                Toevoegen
               </button>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>
