@@ -16,7 +16,7 @@
     "pdf-parse": "^1.1.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.0",
-    "yahoo-finance2": "^2.14.0"
+    "yahoo-finance2": "^3.13.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
